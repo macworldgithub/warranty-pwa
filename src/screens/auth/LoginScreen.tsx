@@ -65,7 +65,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [signUpEmail, setSignUpEmail] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
-  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>(['site_cranbourne_byd']);
   const [primarySiteId, setPrimarySiteId] = useState<string>('site_cranbourne_byd');
 
   // Sign In Form Fields
@@ -95,7 +94,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const activeSites = (sites || []).filter((site) => site.isActive !== false);
         if (activeSites.length > 0) {
           setRooftopOptions(activeSites);
-          setSelectedSiteIds([activeSites[0].id]);
           setPrimarySiteId(activeSites[0].id);
         }
       })
@@ -152,19 +150,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       setAuthError('Passwords do not match.');
       return;
     }
-    if (selectedSiteIds.length === 0) {
-      setAuthError('Please select at least one dealership site.');
+    if (!primarySiteId) {
+      setAuthError('Please select your primary dealership site.');
       return;
     }
 
     try {
-      const chosenDefaultSite = primarySiteId || selectedSiteIds[0];
       await registerTechnician({
         name: signUpName.trim(),
         email: signUpEmail.trim().toLowerCase(),
         password: signUpPassword,
-        defaultSiteId: chosenDefaultSite,
-        authorizedSiteIds: selectedSiteIds,
+        defaultSiteId: primarySiteId,
       });
 
       onLoginSuccess();
@@ -194,27 +190,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  // Toggle site selection
-  const handleToggleSite = (siteId: string) => {
-    if (selectedSiteIds.includes(siteId)) {
-      if (selectedSiteIds.length === 1) {
-        // Don't allow deselecting the only site
-        return;
-      }
-      const updated = selectedSiteIds.filter((id) => id !== siteId);
-      setSelectedSiteIds(updated);
-      if (primarySiteId === siteId) {
-        setPrimarySiteId(updated[0]);
-      }
-    } else {
-      const updated = [...selectedSiteIds, siteId];
-      setSelectedSiteIds(updated);
-      if (!primarySiteId) {
-        setPrimarySiteId(siteId);
-      }
-    }
-  };
-
   const switchTab = (tab: AuthTab) => {
     setActiveTab(tab);
     setAuthError(null);
@@ -226,7 +201,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   };
 
   const primarySiteObj = rooftopOptions.find((s) => s.id === primarySiteId) || rooftopOptions[0];
-  const additionalSitesCount = selectedSiteIds.length > 1 ? selectedSiteIds.length - 1 : 0;
 
   return (
     <ScrollView
@@ -250,14 +224,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           {activeTab === 'PIN_SETUP'
             ? pinStep === 1
               ? 'First Login Activation'
-              : 'Create Credentials & Sites'
+              : 'Create Credentials'
             : 'Technician Sign In'}
         </Text>
         <Text style={styles.subtitle}>
           {activeTab === 'PIN_SETUP'
             ? pinStep === 1
               ? 'Enter your workshop access PIN to activate your device'
-              : 'Set your username, password, and assign your dealership rooftops'
+              : 'Set your username, password, and primary workshop'
             : 'Sign in to access warranty tickets and evidence capture.'}
         </Text>
       </View>
@@ -473,12 +447,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             {/* Compact Professional Dealership Sites Dropdown */}
             <View style={styles.field}>
-              <View style={styles.sitesDropdownLabelRow}>
-                <Text style={styles.fieldLabel}>ASSIGNED DEALERSHIP SITES</Text>
-                <Text style={styles.sitesCountBadge}>
-                  {selectedSiteIds.length} Selected
-                </Text>
-              </View>
+              <Text style={styles.fieldLabel}>PRIMARY DEALERSHIP SITE</Text>
 
               <TouchableOpacity
                 style={styles.dropdownSelector}
@@ -489,15 +458,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <Icon name="building" size={18} color={colors.primary} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.dropdownPrimarySiteText} numberOfLines={1}>
-                      {primarySiteObj?.name || 'Select Workshop Sites'}
+                      {primarySiteObj?.name || 'Select your workshop'}
                     </Text>
-                    {additionalSitesCount > 0 ? (
-                      <Text style={styles.dropdownAdditionalText}>
-                        + {additionalSitesCount} other rooftop{additionalSitesCount > 1 ? 's' : ''} assigned
-                      </Text>
-                    ) : (
-                      <Text style={styles.dropdownSubtext}>Primary workshop location</Text>
-                    )}
+                    <Text style={styles.dropdownSubtext}>Your administrator can assign more sites after setup.</Text>
                   </View>
                 </View>
                 <View style={styles.dropdownRightAction}>
@@ -574,9 +537,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>Assigned Dealership Sites</Text>
+                <Text style={styles.modalTitle}>Primary Dealership Site</Text>
                 <Text style={styles.modalSub}>
-                  Select all rooftops where you are authorized to work:
+                  Select your primary workshop.
                 </Text>
               </View>
               <TouchableOpacity
@@ -589,8 +552,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             <ScrollView style={styles.modalSiteList} showsVerticalScrollIndicator={false}>
               {rooftopOptions.map((site) => {
-                const isSelected = selectedSiteIds.includes(site.id);
-                const isPrimary = primarySiteId === site.id;
+                const isSelected = primarySiteId === site.id;
 
                 return (
                   <TouchableOpacity
@@ -599,7 +561,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       styles.modalSiteItem,
                       isSelected && styles.modalSiteItemSelected,
                     ]}
-                    onPress={() => handleToggleSite(site.id)}
+                    onPress={() => setPrimarySiteId(site.id)}
                     activeOpacity={0.75}
                   >
                     <View style={styles.modalSiteItemLeft}>
@@ -621,34 +583,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         >
                           {site.name}
                         </Text>
-                        {isPrimary && (
-                          <Text style={styles.modalPrimaryTag}>Primary Rooftop</Text>
-                        )}
                       </View>
                     </View>
 
-                    {isSelected && (
-                      <TouchableOpacity
-                        style={[
-                          styles.primaryBadgeBtn,
-                          isPrimary && styles.primaryBadgeBtnActive,
-                        ]}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          setPrimarySiteId(site.id);
-                        }}
-                        activeOpacity={0.7}
-                      >
-                        <Text
-                          style={[
-                            styles.primaryBadgeBtnText,
-                            isPrimary && styles.primaryBadgeBtnTextActive,
-                          ]}
-                        >
-                          {isPrimary ? '★ Primary' : 'Make Primary'}
-                        </Text>
-                      </TouchableOpacity>
-                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -656,7 +593,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             <View style={styles.modalActions}>
               <Button
-                title={`Done (${selectedSiteIds.length} Selected)`}
+                title="Done"
                 variant="primary"
                 size="md"
                 onPress={() => setShowSitesModal(false)}
@@ -998,20 +935,6 @@ const styles = StyleSheet.create({
   },
 
   // ── Compact Dealership Sites Dropdown ──
-  sitesDropdownLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sitesCountBadge: {
-    fontSize: typography.sizes.xs - 1,
-    fontWeight: typography.weights.bold,
-    color: colors.primary,
-    backgroundColor: colors.surfaceHighlight,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
   dropdownSelector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1034,12 +957,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold,
     color: colors.textPrimary,
-  },
-  dropdownAdditionalText: {
-    fontSize: typography.sizes.xs - 1,
-    color: colors.primary,
-    fontWeight: typography.weights.medium,
-    marginTop: 1,
   },
   dropdownSubtext: {
     fontSize: typography.sizes.xs - 1,
@@ -1152,30 +1069,6 @@ const styles = StyleSheet.create({
   },
   modalSiteNameSelected: {
     color: colors.textPrimary,
-    fontWeight: typography.weights.bold,
-  },
-  modalPrimaryTag: {
-    fontSize: 10,
-    color: colors.primary,
-    fontWeight: typography.weights.bold,
-    marginTop: 2,
-  },
-  primaryBadgeBtn: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: colors.backgroundSecondary,
-  },
-  primaryBadgeBtnActive: {
-    backgroundColor: colors.primary,
-  },
-  primaryBadgeBtnText: {
-    fontSize: 10,
-    color: colors.textSecondary,
-    fontWeight: typography.weights.medium,
-  },
-  primaryBadgeBtnTextActive: {
-    color: '#FFFFFF',
     fontWeight: typography.weights.bold,
   },
   modalActions: {

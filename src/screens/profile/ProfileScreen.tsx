@@ -70,6 +70,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
 
   const isAdmin = user?.role === 'ADMIN';
   const isClerk = user?.role === 'CLERK';
+  const createAllowsMultipleSites = createRole === 'CLERK' || createRole === 'TECHNICIAN';
+  const editAllowsMultipleSites = editRole === 'CLERK' || editRole === 'TECHNICIAN';
 
   const usersRequestVersion = useRef(0);
   // Ignore directory responses that started before a later mutation.
@@ -170,12 +172,10 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
     setEditName(targetUser.name || '');
     setEditEmail(targetUser.email || '');
     setEditRole(targetUser.role || 'TECHNICIAN');
-    setEditSiteId(targetUser.defaultSiteId || siteOptions[0]?.id || '');
-    setEditAuthorizedSiteIds(
-      targetUser.authorizedSiteIds?.length
-        ? targetUser.authorizedSiteIds
-        : [targetUser.defaultSiteId || siteOptions[0]?.id || ''].filter(Boolean),
-    );
+    const assigned = targetUser.authorizedSiteIds?.length ? targetUser.authorizedSiteIds : [targetUser.defaultSiteId];
+    const activeAssigned = assigned.filter((id) => siteOptions.some((site) => site.id === id));
+    setEditAuthorizedSiteIds(activeAssigned);
+    setEditSiteId(activeAssigned.includes(targetUser.defaultSiteId) ? targetUser.defaultSiteId : activeAssigned[0] || (targetUser.role === 'ADMIN' ? targetUser.defaultSiteId || '' : ''));
     setEditPassword('');
     setEditModalVisible(true);
   };
@@ -190,8 +190,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
       Alert.alert('Validation Error', 'Please enter a valid work email address.');
       return;
     }
-    if (createRole === 'CLERK' && createAuthorizedSiteIds.length === 0) {
-      Alert.alert('Validation Error', 'Select at least one dealership site for this Warranty Clerk.');
+    if (createAllowsMultipleSites && createAuthorizedSiteIds.length === 0) {
+      Alert.alert('Validation Error', 'Select at least one dealership site for this user.');
       return;
     }
     if (!createSiteId) {
@@ -208,7 +208,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
         password: createPassword.trim() || 'Booran2026!',
         role: createRole,
         siteId: createSiteId,
-        authorizedSiteIds: createRole === 'CLERK' ? createAuthorizedSiteIds : [createSiteId],
+        authorizedSiteIds: createAllowsMultipleSites ? createAuthorizedSiteIds : [createSiteId],
       });
 
       Alert.alert('User Created', `Account for ${createName} (${createRole}) has been created successfully.`);
@@ -234,8 +234,8 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
       Alert.alert('Validation Error', 'Please enter the user full name.');
       return;
     }
-    if (editRole === 'CLERK' && editAuthorizedSiteIds.length === 0) {
-      Alert.alert('Validation Error', 'Select at least one dealership site for this Warranty Clerk.');
+    if (editAllowsMultipleSites && editAuthorizedSiteIds.length === 0) {
+      Alert.alert('Validation Error', 'Select at least one dealership site for this user.');
       return;
     }
     if (!editSiteId) {
@@ -246,16 +246,16 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
     usersRequestVersion.current++;
     setEditSubmitting(true);
     try {
-      await authApi.updateUser(editingUser.id, {
+      const savedUser = await authApi.updateUser(editingUser.id, {
         name: editName.trim(),
         email: editEmail.trim(),
         role: editRole,
         siteId: editSiteId,
-        authorizedSiteIds: editRole === 'CLERK' ? editAuthorizedSiteIds : [editSiteId],
+        authorizedSiteIds: editAllowsMultipleSites ? editAuthorizedSiteIds : [editSiteId],
         ...(editPassword?.trim() ? { password: editPassword.trim() } : {}),
       });
 
-      const rooftopName = getSiteName(editSiteId);
+      const rooftopName = getSiteName(savedUser.defaultSiteId);
 
       // Update user in local usersList state immediately
       setUsersList((prev) =>
@@ -263,11 +263,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
           u.id === editingUser.id
             ? {
               ...u,
-              name: editName.trim(),
-              email: editEmail.trim(),
-              role: editRole,
-              defaultSiteId: editSiteId,
-              authorizedSiteIds: editRole === 'CLERK' ? editAuthorizedSiteIds : [editSiteId],
+              ...savedUser,
             }
             : u
         )
@@ -729,14 +725,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                 {/* Dealership Site Selector */}
                 <View style={styles.modalInputGroup}>
                   <Text style={styles.modalInputLabel}>
-                    {createRole === 'CLERK' ? 'Assigned Dealership Sites' : 'Primary Dealership Rooftop'}
+                    {createAllowsMultipleSites ? 'Assigned Dealership Sites' : 'Primary Dealership Rooftop'}
                   </Text>
                   {loadingSites && (
                     <Text style={styles.modalHintText}>Loading dealership rooftops...</Text>
                   )}
                   <View style={styles.sitePickerList}>
                     {siteOptions.map((site) => {
-                      const isChosen = createRole === 'CLERK'
+                      const isChosen = createAllowsMultipleSites
                         ? createAuthorizedSiteIds.includes(site.id)
                         : createSiteId === site.id;
                       return (
@@ -744,7 +740,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                           key={site.id}
                           style={[styles.siteOption, isChosen && styles.siteOptionActive]}
                           onPress={() => {
-                            if (createRole === 'CLERK') {
+                            if (createAllowsMultipleSites) {
                               toggleCreateSite(site.id);
                             } else {
                               setCreateSiteId(site.id);
@@ -767,7 +763,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                       <Text style={styles.modalHintText}>No dealership rooftops returned by backend.</Text>
                     )}
                   </View>
-                  {createRole === 'CLERK' && createAuthorizedSiteIds.length > 0 && (
+                  {createAllowsMultipleSites && createAuthorizedSiteIds.length > 0 && (
                     <>
                       <Text style={[styles.modalInputLabel, { marginTop: spacing.md }]}>Default Site</Text>
                       <View style={styles.sitePickerList}>
@@ -943,14 +939,14 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                 {/* Dealership Site Selector */}
                 <View style={styles.modalInputGroup}>
                   <Text style={styles.modalInputLabel}>
-                    {editRole === 'CLERK' ? 'Assigned Dealership Sites' : 'Primary Dealership Rooftop'}
+                    {editAllowsMultipleSites ? 'Assigned Dealership Sites' : 'Primary Dealership Rooftop'}
                   </Text>
                   {loadingSites && (
                     <Text style={styles.modalHintText}>Loading dealership rooftops...</Text>
                   )}
                   <View style={styles.sitePickerList}>
                     {siteOptions.map((site) => {
-                      const isChosen = editRole === 'CLERK'
+                      const isChosen = editAllowsMultipleSites
                         ? editAuthorizedSiteIds.includes(site.id)
                         : editSiteId === site.id;
                       return (
@@ -958,7 +954,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                           key={site.id}
                           style={[styles.siteOption, isChosen && styles.siteOptionActive]}
                           onPress={() => {
-                            if (editRole === 'CLERK') {
+                            if (editAllowsMultipleSites) {
                               toggleEditSite(site.id);
                             } else {
                               setEditSiteId(site.id);
@@ -981,7 +977,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
                       <Text style={styles.modalHintText}>No dealership rooftops returned by backend.</Text>
                     )}
                   </View>
-                  {editRole === 'CLERK' && editAuthorizedSiteIds.length > 0 && (
+                  {editAllowsMultipleSites && editAuthorizedSiteIds.length > 0 && (
                     <>
                       <Text style={[styles.modalInputLabel, { marginTop: spacing.md }]}>Default Site</Text>
                       <View style={styles.sitePickerList}>

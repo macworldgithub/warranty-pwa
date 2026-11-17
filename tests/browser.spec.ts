@@ -129,9 +129,9 @@ test('production app has valid install metadata and correctly sized branded icon
     expect(errors.installabilityErrors).toEqual([]);
   } finally { await context.close(); }
 });
-test('all seven warranty wizard steps accept real case data and submit the pack', async ({ page }) => {
+test('a technician with two assigned rooftops can submit a warranty ticket at the second site', async ({ page }) => {
   const assigned = { ...site, id: 'site_dandenong_2027', name: 'Dandenong' };
-  await signedIn(page, { ...user, authorizedSiteIds: [assigned.id] }, [site, assigned]);
+  await signedIn(page, { ...user, authorizedSiteIds: [site.id, assigned.id] }, [site, assigned]);
   let saved: any, submitted = false;
   await page.route('**/api/v1/warranty-cases**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -144,6 +144,8 @@ test('all seven warranty wizard steps accept real case data and submit the pack'
   });
   await page.getByText('Warranty Capture', { exact: true }).click();
   await page.getByText('Start New Case', { exact: true }).click();
+  await expect(page.getByText(site.name, { exact: true }).last()).toBeVisible();
+  await page.getByText(assigned.name, { exact: true }).click();
   await page.getByPlaceholder('e.g. CR-21693').fill('CR-BROWSER-1');
   await page.getByText('Vehicle Info', { exact: true }).last().click();
   await page.getByPlaceholder('e.g. 1C4HJXDG4MW482702').fill('LGXCE4C86P0019283');
