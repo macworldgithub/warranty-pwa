@@ -131,7 +131,15 @@ test('production app has valid install metadata and correctly sized branded icon
 });
 test('a technician with two assigned rooftops can submit a warranty ticket at the second site', async ({ page }) => {
   const assigned = { ...site, id: 'site_dandenong_2027', name: 'Dandenong' };
-  await signedIn(page, { ...user, authorizedSiteIds: [site.id, assigned.id] }, [site, assigned]);
+  const inactive = { ...site, id: 'site_retired', name: 'Retired Rooftop', isActive: false };
+  const unassigned = { ...site, id: 'site_unassigned', name: 'Unassigned Rooftop' };
+  await signedIn(page, { ...user, authorizedSiteIds: [site.id, assigned.id, inactive.id] }, [site, assigned, inactive, unassigned]);
+  const rooftopCard = page.getByTestId('home-assigned-rooftops');
+  await expect(rooftopCard.getByText(site.name, { exact: true })).toBeVisible();
+  await expect(rooftopCard.getByText(assigned.name, { exact: true })).toBeVisible();
+  await expect(rooftopCard.getByText('Current', { exact: true })).toHaveCount(1);
+  await expect(rooftopCard.getByText(inactive.name, { exact: true })).toHaveCount(0);
+  await expect(rooftopCard.getByText(unassigned.name, { exact: true })).toHaveCount(0);
   let saved: any, submitted = false;
   await page.route('**/api/v1/warranty-cases**', async route => {
     const path = new URL(route.request().url()).pathname;

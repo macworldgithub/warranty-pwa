@@ -14,7 +14,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import {
   Building2,
-  Lock,
   ShieldCheck,
   Key,
   Bell,
@@ -36,13 +35,15 @@ import { offlineStorage } from '../../services/offlineStorage';
 import { casesApi } from '../../api/cases.api';
 import { loanAgreementsApi } from '../../api/loanAgreements.api';
 import { hoistApi } from '../../api/hoist.api';
+import { sitesApi } from '../../api/sites.api';
 import { roadTestService } from '../../services/roadtest.service';
 import { rooftopVehiclesService } from '../../services/rooftopVehicles.service';
+import { assignedWarrantySiteIds } from '../../services/warrantyRooftops';
 import { notificationsService, AppNotificationPayload } from '../../services/notifications.service';
 import { NotificationModal } from '../../components/notifications/NotificationModal';
 import { BottomNavBar } from '../../components/common/BottomNavBar';
 import { LogoutDialog } from '../../components/common/LogoutDialog';
-import { WarrantyCase, LoanAgreement } from '../../types';
+import { WarrantyCase, LoanAgreement, Site } from '../../types';
 
 import booranLogo from '../../assets/images/booran-motors-transparent.png';
 interface TechnicianHomeScreenProps {
@@ -272,6 +273,21 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
   const [lastDriveTimestamp, setLastDriveTimestamp] = useState<string | null>(null);
   const [agreements, setAgreements] = useState<LoanAgreement[]>([]);
   const [hoistSummary, setHoistSummary] = useState<any>(null);
+  const [sites, setSites] = useState<Site[] | null>();
+  const assignedSiteIds = assignedWarrantySiteIds(user);
+  const assignedRooftops = sites?.filter((site) => site.isActive !== false && assignedSiteIds.includes(site.id)) ?? [];
+
+  const loadRooftops = useCallback(async () => {
+    try {
+      setSites(await sitesApi.getSites());
+    } catch {
+      setSites((previous) => previous ?? null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRooftops();
+  }, [loadRooftops]);
 
   // Calculate greeting by time of day
   const greeting = useMemo(() => {
@@ -368,6 +384,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
 
   const onRefresh = () => {
     setRefreshing(true);
+    void loadRooftops();
     loadDashboardData();
   };
 
@@ -544,22 +561,27 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Card 1: Your Assigned Rooftop */}
-        <View style={styles.rooftopCard}>
-          <View style={styles.rooftopLeft}>
-            <View style={styles.rooftopIconCircle}>
-              <Building2 size={20} color="#DC2626" />
-            </View>
-            <View style={styles.rooftopTextCol}>
-              <Text style={styles.rooftopEyebrow}>YOUR ASSIGNED ROOFTOP</Text>
-              <Text style={styles.rooftopName} numberOfLines={1}>
-                {siteName || 'Booran BYD Cranbourne'}
-              </Text>
-            </View>
+        <View style={styles.rooftopCard} testID="home-assigned-rooftops">
+          <View style={styles.rooftopIconCircle}>
+            <Building2 size={20} color="#DC2626" />
           </View>
-          <View style={styles.assignedBadge}>
-            <Lock size={12} color="#475569" strokeWidth={2.2} />
-            <Text style={styles.assignedBadgeText}>Assigned</Text>
+          <View style={styles.rooftopTextCol}>
+            <Text style={styles.rooftopEyebrow}>YOUR ASSIGNED ROOFTOPS</Text>
+            {assignedRooftops.map((site) => (
+              <View key={site.id} style={styles.rooftopRow}>
+                <Text style={styles.rooftopName}>{site.name}</Text>
+                {site.id === activeSiteId && (
+                  <View style={styles.assignedBadge}>
+                    <Text style={styles.assignedBadgeText}>Current</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+            {assignedRooftops.length === 0 && (
+              <Text style={styles.rooftopStatus}>
+                {sites === undefined ? 'Loading rooftops…' : sites === null ? 'Could not load assigned rooftops.' : 'No active rooftops assigned.'}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -889,8 +911,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
     shadowColor: '#0F172A',
@@ -898,13 +920,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-  },
-  rooftopLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-    marginRight: 8,
   },
   rooftopIconCircle: {
     width: 44,
@@ -916,6 +931,7 @@ const styles = StyleSheet.create({
   },
   rooftopTextCol: {
     flex: 1,
+    gap: 4,
   },
   rooftopEyebrow: {
     color: '#DC2626',
@@ -924,10 +940,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   rooftopName: {
+    flex: 1,
     color: '#0F172A',
     fontSize: 16,
     fontWeight: '800',
-    marginTop: 2,
+  },
+  rooftopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rooftopStatus: {
+    color: '#475569',
+    fontSize: 13,
   },
   assignedBadge: {
     flexDirection: 'row',
