@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Building2 } from 'lucide-react-native';
 import { useAuth } from '../../context/AuthContext';
+import { useRoadTest } from '../../context/RoadTestContext';
 import { assignedWarrantySiteIds } from '../../services/warrantyRooftops';
 import type { Site } from '../../types';
 
@@ -11,15 +12,36 @@ interface AssignedRooftopsCardProps {
 }
 
 export function AssignedRooftopsCard({ sites, currentSiteId, testID }: AssignedRooftopsCardProps) {
-  const { user } = useAuth();
+  const { user, setActiveSiteId } = useAuth();
+  const { isLiveDrive, demoRunning, pendingCompletion } = useRoadTest();
   const assignedSiteIds = assignedWarrantySiteIds(user);
   const assignedRooftops = sites?.filter((site) => site.isActive !== false && assignedSiteIds.includes(site.id)) ?? [];
+  const selectedSiteId = assignedRooftops.some((site) => site.id === currentSiteId) ? currentSiteId : '';
+  const switchingLocked = isLiveDrive || demoRunning || pendingCompletion;
 
   return (
     <View style={styles.rooftopCard} testID={testID}>
       <View style={styles.rooftopIconCircle}>
         <Building2 size={20} color="#DC2626" />
       </View>
+      {assignedRooftops.length > 0 && (
+        <View style={styles.rooftopControl}>
+          <select
+            aria-label="Current rooftop"
+            value={selectedSiteId}
+            disabled={switchingLocked}
+            onChange={(event) => {
+              const siteId = event.currentTarget.value;
+              if (!switchingLocked && assignedRooftops.some((site) => site.id === siteId)) setActiveSiteId(siteId);
+            }}
+            style={{ width: '100%', minWidth: 0, minHeight: 36, padding: '6px 8px', borderRadius: 8, border: '1px solid #E2E8F0', color: '#0F172A', background: '#F8FAFC', font: 'inherit', fontSize: 13 }}
+          >
+            {!selectedSiteId && <option value="" disabled>Select rooftop</option>}
+            {assignedRooftops.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+          </select>
+          {switchingLocked && <Text style={styles.rooftopStatus}>Finish the drive to switch rooftops.</Text>}
+        </View>
+      )}
       <View style={styles.rooftopTextCol}>
         <Text style={styles.rooftopEyebrow}>YOUR ASSIGNED ROOFTOPS</Text>
         {assignedRooftops.map((site) => (
@@ -91,6 +113,12 @@ const styles = StyleSheet.create({
   rooftopStatus: {
     color: '#475569',
     fontSize: 13,
+  },
+  rooftopControl: {
+    maxWidth: '45%',
+    minWidth: 0,
+    width: 180,
+    gap: 4,
   },
   assignedBadge: {
     flexDirection: 'row',

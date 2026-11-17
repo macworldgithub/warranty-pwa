@@ -96,6 +96,7 @@ export function RoadTestScreen({
 }: RoadTestScreenProps) {
   const insets = useSafeAreaInsets();
   const { user, activeSiteId } = useAuth();
+  const isTechnician = user?.role === 'TECHNICIAN';
   const isNetworkAdmin = user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER';
   const isClerk = user?.role === 'CLERK';
   const technicianSiteId = isNetworkAdmin
@@ -179,10 +180,10 @@ export function RoadTestScreen({
     : siteOptions.find((site) => site.id === technicianSiteId)?.name || technicianSiteId || 'Unassigned';
   const visibleTripRecords = useMemo(
     () =>
-      isNetworkAdmin && selectedAdminSiteId !== 'all'
-        ? tripRecords.filter((trip) => trip.siteId === selectedAdminSiteId)
+      (isTechnician || isNetworkAdmin) && effectiveSiteId !== 'all'
+        ? tripRecords.filter((trip) => trip.siteId === effectiveSiteId)
         : tripRecords,
-    [isNetworkAdmin, selectedAdminSiteId, tripRecords]
+    [isTechnician, isNetworkAdmin, effectiveSiteId, tripRecords]
   );
 
   useEffect(() => {

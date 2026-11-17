@@ -11,6 +11,7 @@ import { setStorageUser } from '../../web/storage';
 import { setSyncSession } from '../../web/outbox';
 import { ENV } from '../config/env';
 import { notificationsService } from '../services/notifications.service';
+import { assignedWarrantySiteIds } from '../services/warrantyRooftops';
 
 interface AuthContextType {
   user: User | null;
@@ -39,16 +40,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-function getInitialSiteId(user: User | null): string {
+function getInitialSiteId(user: User | null, currentSiteId?: string): string {
   if (user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER') {
     return 'all';
   }
 
-  return (
-    user?.defaultSiteId ||
-    user?.authorizedSiteIds?.[0] ||
-    ''
-  );
+  const assigned = assignedWarrantySiteIds(user);
+  if (currentSiteId && assigned.includes(currentSiteId)) return currentSiteId;
+  return user?.defaultSiteId && assigned.includes(user.defaultSiteId) ? user.defaultSiteId : assigned[0] || '';
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -209,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const me = await authApi.getMe();
       if (me && apiClient.getToken() === refreshingToken) {
         setUser(me);
-        setActiveSiteId(getInitialSiteId(me));
+        setActiveSiteId((currentSiteId) => getInitialSiteId(me, currentSiteId));
       }
     } catch (e) {}
   };

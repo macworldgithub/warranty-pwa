@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -163,14 +163,14 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
     return name.slice(0, 2).toUpperCase();
   };
 
-  const [selectedSiteId, setSelectedSiteId] = useState(
-    isClerk || isTechnician ? technicianSiteId : 'all'
-  );
+  const [selectedSiteId, setSelectedSiteId] = useState('all');
+  const effectiveSiteId = isTechnician || isClerk ? technicianSiteId : selectedSiteId;
   const [activeTab, setActiveTab] = useState<'ALL' | 'ON_LOAN' | 'RETURNED' | 'TODAY'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [agreements, setAgreements] = useState<LoanAgreement[]>([]);
+  const loanDataRequest = useRef(0);
 
   // Modals / Subscreens
   const [isWizardOpen, setIsWizardOpen] = useState(false);
@@ -209,26 +209,24 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
     );
   };
 
-  useEffect(() => {
-    if (isClerk || isTechnician) {
-      setSelectedSiteId(technicianSiteId);
-    }
-  }, [isTechnician, isClerk, technicianSiteId]);
-
   const fetchLoanData = useCallback(async () => {
+    const request = ++loanDataRequest.current;
     try {
       setLoading(true);
-      const data = await loanAgreementsApi.findAll(selectedSiteId !== 'all' ? selectedSiteId : undefined);
-      setAgreements(Array.isArray(data) ? data : []);
+      const data = await loanAgreementsApi.findAll(effectiveSiteId !== 'all' ? effectiveSiteId : undefined);
+      if (request === loanDataRequest.current) setAgreements(Array.isArray(data) ? data : []);
     } catch (err: any) {
+      if (request !== loanDataRequest.current) return;
       console.warn('Failed to load loan agreements:', err?.message);
       setAgreements([]);
       Alert.alert('Unable to Load Loans', err?.message || 'Please check your connection and retry.');
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (request === loanDataRequest.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-  }, [isClerk, selectedSiteId]);
+  }, [effectiveSiteId]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -236,7 +234,8 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
   };
 
   useEffect(() => {
-    fetchLoanData();
+    void fetchLoanData();
+    return () => { loanDataRequest.current += 1; };
   }, [fetchLoanData]);
 
   const openAgreementWizard = (purpose: 'SERVICE_LOANER' | 'TEST_DRIVE' = 'SERVICE_LOANER') => {
@@ -270,15 +269,8 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
 
   const todayDateStr = new Date().toDateString();
 
-  const filteredAgreements = agreements.filter((ag) => {
-    const effectiveSiteId = isTechnician || isClerk ? technicianSiteId : selectedSiteId;
-    if (isClerk && ag.siteId !== technicianSiteId) {
-      return false;
-    }
-    if (effectiveSiteId !== 'all' && ag.siteId !== effectiveSiteId && selectedSiteId !== 'all') {
-      return false;
-    }
-
+  const scopedAgreements = agreements.filter((agreement) => effectiveSiteId === 'all' || agreement.siteId === effectiveSiteId);
+  const filteredAgreements = scopedAgreements.filter((ag) => {
     const category = getDynamicLoanCategory(ag.status, ag.dueBackDateTime);
 
     if (activeTab === 'ON_LOAN' && category === 'RETURNED') return false;
@@ -311,9 +303,6 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
     return cat === 'RETURNED';
   });
 
-  const scopedAgreements = agreements.filter((ag) =>
-    !isClerk || ag.siteId === technicianSiteId
-  );
   const onLoanCount = scopedAgreements.filter((ag) => getDynamicLoanCategory(ag.status, ag.dueBackDateTime) !== 'RETURNED').length;
   const returnedCount = scopedAgreements.filter((ag) => getDynamicLoanCategory(ag.status, ag.dueBackDateTime) === 'RETURNED').length;
   const todayCount = scopedAgreements.filter((ag) => ag.createdAt && new Date(ag.createdAt).toDateString() === todayDateStr).length;
@@ -331,7 +320,7 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
       <IssueLoanerWizardScreen
         initialRooftop={activeLabel}
         isRooftopLocked={isTechnician || isClerk}
-        allowedSiteIds={isClerk ? [technicianSiteId] : undefined}
+        allowedSiteIds={isTechnician || isClerk ? [technicianSiteId] : undefined}
         purpose={wizardPurpose}
         onBack={() => setIsWizardOpen(false)}
         onSuccess={(_newAgreement) => {

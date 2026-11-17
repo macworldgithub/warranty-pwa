@@ -46,20 +46,34 @@ for (const menu of ['Vehicle Inspection', 'Internal Test Drive', 'Warranty Captu
     expect(errors).toEqual([]); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
-test('Drive and Loaners show the technician’s assigned rooftops from Home', async ({ page }) => {
+test('the rooftop dropdown switches the current site across Drive, Loaners, and Home', async ({ page }) => {
   const dandenong = { ...site, id: 'site_dandenong_2027', name: 'Dandenong' };
   const bayside = { ...site, id: 'site_bayside_skoda', name: 'Bayside Skoda' };
   const profile = { ...user, defaultSiteId: dandenong.id, authorizedSiteIds: [dandenong.id, bayside.id] };
   await signedIn(page, profile, [site, bayside, dandenong]);
 
-  for (const [menu, testId] of [['Internal Test Drive', 'road-test-assigned-rooftops'], ['Loaners', 'loaners-assigned-rooftops']]) {
-    await page.getByText(menu, { exact: true }).click();
-    const card = page.getByTestId(testId);
-    await expect(card.getByText(bayside.name, { exact: true })).toBeVisible();
-    await expect(card.getByText(dandenong.name, { exact: true }).locator('..').getByText('Current')).toBeVisible();
-    await expect(card.getByText(site.name, { exact: true })).toHaveCount(0);
-    await page.getByText('Home', { exact: true }).last().click();
-  }
+  await page.getByText('Internal Test Drive', { exact: true }).click();
+  const driveCard = page.getByTestId('road-test-assigned-rooftops');
+  const driveDropdown = driveCard.getByRole('combobox', { name: 'Current rooftop' });
+  await expect(driveDropdown).toHaveValue(dandenong.id);
+  await expect(driveDropdown.locator('option')).toHaveText([bayside.name, dandenong.name]);
+  await driveDropdown.selectOption(bayside.id);
+  await expect(driveDropdown).toHaveValue(bayside.id);
+  await expect(driveCard.getByText('Current', { exact: true }).locator('xpath=../..')).toContainText(bayside.name);
+
+  await page.getByText('Home', { exact: true }).last().click();
+  const homeDropdown = page.getByTestId('home-assigned-rooftops').getByRole('combobox', { name: 'Current rooftop' });
+  await expect(homeDropdown).toHaveValue(bayside.id);
+  await page.getByText('Loaners', { exact: true }).click();
+  const loanDropdown = page.getByTestId('loaners-assigned-rooftops').getByRole('combobox', { name: 'Current rooftop' });
+  await expect(loanDropdown).toHaveValue(bayside.id);
+  const nextLoansRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return url.pathname.endsWith('/loan-agreements') && url.searchParams.get('siteId') === dandenong.id;
+  });
+  await loanDropdown.selectOption(dandenong.id);
+  await nextLoansRequest;
+  await expect(loanDropdown).toHaveValue(dandenong.id);
 });
 test('desktop uses the same working screens without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 }); await signedIn(page);
