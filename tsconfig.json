@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext", "moduleResolution": "Bundler", "jsx": "react-jsx",
+    "esModuleInterop": true, "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true, "strict": false, "noEmit": true,
+    "types": ["vite/client", "node"],
+    "paths": {
+      "lucide-react-native": ["./node_modules/lucide-react"],
+      "react-native-image-picker": ["./web/image-picker.ts"],
+      "react-native-vision-camera": ["./web/vision-camera.tsx"],
+      "@react-native-community/datetimepicker": ["./web/DateTimePicker.tsx"]
+    }
+  },
+  "include": ["App.tsx", "src", "web", "tests", "vite.config.ts"],
+  "exclude": ["src/types/vision-camera.d.ts", "src/types/declarations.d.ts"]
+}

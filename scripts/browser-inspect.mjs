@@ -1,0 +1,13 @@
+import { chromium } from '@playwright/test';
+import fs from 'node:fs/promises';
+const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
+page.on('console', message => { if (message.type() === 'error') console.log('CONSOLE:', message.text().slice(0, 240)); });
+await page.goto(process.argv[2] || 'http://localhost:5173/');
+await page.getByText('Booran', { exact: false }).first().waitFor({ timeout: 30000 }).catch(() => {});
+await fs.mkdir('test-results', { recursive: true });
+await page.screenshot({ path: 'test-results/login.png', fullPage: true });
+console.log((await page.locator('body').innerText()).slice(0, 5500));
+console.log('Scroll width:', await page.evaluate(() => [document.documentElement.scrollWidth, innerWidth]));
+await browser.close();
