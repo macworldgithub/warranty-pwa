@@ -4,6 +4,8 @@ export interface TranscribeResponse {
   duration?: number;
   language?: string;
   source?: 'deepgram' | 'mock' | 'local' | 'fallback';
+  requiresManualEntry?: boolean;
+  failureReason?: 'not_configured' | 'no_speech' | 'provider_error';
 }
 
 export interface VoiceStatusResponse {

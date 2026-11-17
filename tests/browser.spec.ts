@@ -233,8 +233,11 @@ test.describe('browser camera adapter', () => {
     });
     await page.getByText('Warranty Capture', { exact: true }).click(); await page.getByText('Start New Case', { exact: true }).click();
     await page.getByText('Voice', { exact: true }).click();
-    const dictate = page.getByText('Hold to Dictate Note', { exact: true }); await dictate.scrollIntoViewIfNeeded(); const box = await dictate.boundingBox();
-    await page.mouse.move(box!.x + 5, box!.y + 5); await page.mouse.down(); await page.waitForTimeout(350); await page.mouse.up();
+    await page.getByText('Start Dictation', { exact: true }).click();
+    const stop = page.getByText('Listening… Tap to Stop', { exact: true });
+    await expect(stop).toBeVisible();
+    await expect(page.getByText('1s', { exact: true })).toBeVisible();
+    await stop.click();
     await expect(page.getByPlaceholder('Technician notes...')).toHaveValue('Cooling circuit inspection confirmed the reported fault.');
     await page.getByText('Attach Note', { exact: true }).click();
     await expect(page.getByText('Cooling circuit inspection confirmed the reported fault.', { exact: false })).toBeVisible(); expect(audioUploaded).toBe(true);

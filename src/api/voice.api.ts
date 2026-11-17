@@ -42,7 +42,9 @@ export const voiceApi = {
   transcribeUpload: async (formData: FormData): Promise<TranscribeResponse> => {
     return apiClient.uploadFormData<TranscribeResponse>(
       '/voice-to-tech/transcribe/upload',
-      formData
+      formData,
+      undefined,
+      125_000
     );
   },
 };

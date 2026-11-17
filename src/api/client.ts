@@ -140,7 +140,8 @@ class ApiClient {
   public async uploadFormData<T = any>(
     endpoint: string,
     formData: FormData,
-    extraHeaders?: Record<string, string>
+    extraHeaders?: Record<string, string>,
+    timeoutMs = ENV.TIMEOUT_MS
   ): Promise<T> {
     const url = endpoint.startsWith('http')
       ? endpoint
@@ -156,7 +157,7 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ENV.TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(url, {
@@ -181,7 +182,7 @@ class ApiClient {
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
-        throw new Error(`Upload timed out after ${ENV.TIMEOUT_MS / 1000}s`);
+        throw new Error(`Upload timed out after ${timeoutMs / 1000}s`);
       }
       throw error;
     }

@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  Alert,
 } from 'react-native';
 import { colors } from '../../theme/colors';
 import { typography } from '../../theme/typography';
@@ -15,9 +14,9 @@ import { spacing } from '../../theme/spacing';
 import { Icon } from '../common/Icon';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
-import { voiceApi } from '../../api/voice.api';
 import { voiceRecordingService } from '../../services/voiceRecordingService';
 import { VoiceNote } from '../../types';
+import { removeMedia, resolveMedia } from '../../../web/storage';
 
 interface VoiceToTechButtonProps {
   onTranscriptReady: (note: VoiceNote) => void;
@@ -33,82 +32,88 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
   promptSuggestion,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [duration, setDuration] = useState(0);
   const [audioUri, setAudioUri] = useState<string | undefined>();
-  const timerRef = useRef<any>(null);
-  const startRef = useRef<Promise<boolean> | null>(null);
-  const stoppingRef = useRef(false);
+  const busyRef = useRef(false);
   const ownedRef = useRef(false);
+  const unsavedAudio = useRef<string>(undefined);
   const mountedRef = useRef(true);
   const [transcriptionError, setTranscriptionError] = useState('');
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (ownedRef.current) void voiceRecordingService.cancelRecording();
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (ownedRef.current) voiceRecordingService.cancelRecording();
+      if (unsavedAudio.current) void removeMedia(unsavedAudio.current).catch(console.warn);
+    };
   }, []);
 
   const startRecording = async () => {
-    if (startRef.current || isTranscribing) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     ownedRef.current = true;
+    setIsStarting(true);
     setTranscriptionError('');
-    setIsRecording(true);
     setDuration(0);
     setAudioUri(undefined);
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setDuration((prev) => prev + 1);
-    }, 1000);
+    setTranscript('');
 
     try {
-      startRef.current = voiceRecordingService.startRecording((sec) => {
-        if (sec > 0) setDuration(sec);
-      });
-      await startRef.current;
-      if (!mountedRef.current) await voiceRecordingService.cancelRecording();
-    } catch (err: any) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      setIsRecording(false);
-      startRef.current = null;
+      if (await voiceRecordingService.startRecording(setDuration) && mountedRef.current) setIsRecording(true);
+    } catch (error) {
       ownedRef.current = false;
-      Alert.alert('Microphone unavailable', err.message || 'Please allow microphone access or enter notes manually.');
-      console.warn('Microphone start error:', err);
+      if (mountedRef.current) {
+        setTranscriptionError(error instanceof Error ? error.message : 'Could not open the microphone.');
+        setModalVisible(true);
+      }
+    } finally {
+      busyRef.current = false;
+      if (mountedRef.current) setIsStarting(false);
     }
   };
 
-  const stopRecordingAndTranscribe = async () => {
-    if (!startRef.current || stoppingRef.current) return;
-    stoppingRef.current = true;
-    try { await startRef.current; } catch { stoppingRef.current = false; return; }
-    startRef.current = null;
-    ownedRef.current = false;
-    if (!mountedRef.current) { await voiceRecordingService.cancelRecording(); stoppingRef.current = false; return; }
-    if (timerRef.current) clearInterval(timerRef.current);
+  const transcribe = async (existingAudio?: string) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setIsRecording(false);
     setIsTranscribing(true);
+    setTranscriptionError('');
     setModalVisible(true);
 
     try {
-      const result = await voiceRecordingService.stopAndTranscribe();
-      setDuration(Math.max(1, Math.round(result.durationSeconds)));
-      setAudioUri(result.audioUri);
-      if (result.transcript && result.transcript.trim()) {
-        setTranscript(result.transcript.trim());
-      } else {
-        setTranscript('');
-        setTranscriptionError('No speech was recognized. Please type your notes below.');
+      let uri = existingAudio;
+      if (!uri) {
+        const recording = await voiceRecordingService.stopRecording();
+        ownedRef.current = false;
+        uri = recording.audioUri;
+        if (!mountedRef.current) {
+          await removeMedia(uri);
+          return;
+        }
+        unsavedAudio.current = uri;
+        setAudioUri(uri);
+        setDuration(Math.max(1, Math.round(recording.durationSeconds)));
       }
-    } catch (err: any) {
-      console.warn('[VoiceToTechButton] Transcribe fallback notice:', err);
-      setTranscript('');
-      setTranscriptionError(`Transcription unavailable: ${err.message}. Enter your notes below.`);
+      const text = await voiceRecordingService.transcribe(uri);
+      if (mountedRef.current) setTranscript(text);
+    } catch (error) {
+      if (mountedRef.current) setTranscriptionError(error instanceof Error ? error.message : 'Transcription failed.');
     } finally {
-      setIsTranscribing(false);
-      stoppingRef.current = false;
+      ownedRef.current = false;
+      busyRef.current = false;
+      if (mountedRef.current) setIsTranscribing(false);
     }
+  };
+
+  const discardNote = () => {
+    if (unsavedAudio.current) void removeMedia(unsavedAudio.current).catch(console.warn);
+    unsavedAudio.current = undefined;
+    setAudioUri(undefined);
+    setModalVisible(false);
   };
 
   const handleSaveNote = () => {
@@ -126,6 +131,7 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
     };
 
     onTranscriptReady(newNote);
+    unsavedAudio.current = undefined;
     setModalVisible(false);
     setTranscript('');
   };
@@ -135,8 +141,9 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
     <View style={styles.container}>
       <TouchableOpacity
         activeOpacity={0.85}
-        onPressIn={startRecording}
-        onPressOut={stopRecordingAndTranscribe}
+        accessibilityRole="button"
+        disabled={isStarting || isTranscribing}
+        onPress={() => isRecording ? void transcribe() : void startRecording()}
         style={[
           styles.holdButton,
           isRecording && styles.holdButtonRecording,
@@ -151,7 +158,7 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.buttonTitle}>
-            {isRecording ? 'Listening... (Release to Transcribe)' : 'Hold to Dictate Note'}
+            {isStarting ? 'Opening Microphone…' : isRecording ? 'Listening… Tap to Stop' : 'Start Dictation'}
           </Text>
           <Text style={styles.buttonSubtitle}>
             {promptSuggestion || 'Voice to Tech · Australian Workshop STT'}
@@ -191,8 +198,12 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
               <View style={styles.transcriptInputContainer}>
                 {!!transcriptionError && <Text style={{ color: colors.danger, marginBottom: 8 }}>{transcriptionError}</Text>}
                 <Text style={styles.editPromptText}>
-                  Tap below to edit before saving to case:
+                  {transcriptionError ? 'You can type and attach your note below.' : 'Review and edit the transcript before attaching it.'}
                 </Text>
+                {audioUri && <audio controls src={resolveMedia(audioUri)} aria-label="Recorded note" style={{ width: '100%' }} />}
+                {audioUri && transcriptionError && (
+                  <Button title="Retry Transcription" variant="ghost" onPress={() => void transcribe(audioUri)} />
+                )}
                 <TextInput
                   multiline
                   value={transcript}
@@ -208,7 +219,8 @@ export const VoiceToTechButton: React.FC<VoiceToTechButtonProps> = ({
               <Button
                 title="Cancel"
                 variant="ghost"
-                onPress={() => setModalVisible(false)}
+                onPress={discardNote}
+                disabled={isTranscribing}
                 style={{ flex: 1 }}
               />
               <Button
