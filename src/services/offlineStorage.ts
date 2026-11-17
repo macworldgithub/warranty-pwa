@@ -6,6 +6,7 @@ interface LocalDraft extends Partial<CreateWarrantyCaseDto> {
   localId: string;
   savedAt: string;
   step: number;
+  submission?: WarrantyCase['submission'];
 }
 
 export interface VehicleZoneInspection {
@@ -135,12 +136,12 @@ class OfflineStorageService {
     }
   }
 
-  public saveDraft(draft: LocalDraft): void {
+  public saveDraft(draft: LocalDraft, notify = true): void {
     this.drafts.set(draft.localId, {
       ...draft,
       savedAt: new Date().toISOString(),
     });
-    this.notify();
+    if (notify) this.notify();
   }
 
   public getDraft(localId: string): LocalDraft | undefined {

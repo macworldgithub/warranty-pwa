@@ -19,10 +19,12 @@ import { qualityGates } from '../services/qualityGates';
 import { namingEngine } from '../services/namingEngine';
 import { offlineStorage } from '../services/offlineStorage';
 import { useAuth } from './AuthContext';
+import { ENV } from '../config/env';
 
 interface CaseWizardState {
   currentStep: number; // 0 to 6
   caseId: string | null;
+  localDraftId: string | null;
 
   // Step 0 - Start Ticket
   siteId: string;
@@ -120,6 +122,7 @@ interface CaseWizardContextType extends CaseWizardState {
 const defaultState: CaseWizardState = {
   currentStep: 0,
   caseId: null,
+  localDraftId: null,
   siteId: 'site_cranbourne_byd',
   siteName: 'Booran BYD Cranbourne',
   brandId: 'brand_byd',
@@ -510,6 +513,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setState({
       ...defaultState,
       roNumber: `CR-${Math.floor(10000 + Math.random() * 90000)}`,
+      localDraftId: `draft_${crypto.randomUUID()}`,
       ...(initialData || {}),
       evidenceItems: initialEvidence,
     });
@@ -524,6 +528,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     setState({
       currentStep: flaggedOnly ? 3 : (caseItem as any).step || 0,
       caseId: caseItem.id,
+      localDraftId: caseItem.id,
       siteId: caseItem.siteId,
       siteName: caseItem.siteName || '',
       brandId: caseItem.brandId,
@@ -562,9 +567,16 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     evaluateRules();
   };
 
-  const saveDraft = async () => {
+  const draftId = state.localDraftId || state.caseId || `draft_${state.roNumber}`;
+
+  const saveSubmissionDraft = async (
+    submission = offlineStorage.getDraft(draftId)?.submission,
+    evidenceItems = state.evidenceItems,
+    notify = false,
+  ) => {
     const localDraft = {
-      localId: state.caseId || `draft_${state.roNumber || Date.now()}`,
+      localId: draftId,
+      submission,
       step: state.currentStep,
       siteId: state.siteId,
       siteName: state.siteName,
@@ -586,20 +598,35 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       noiseFault: state.noiseFault,
       diagnosticsAvailable: state.diagnosticsAvailable,
       repairStage: state.repairStage,
-      evidenceItems: state.evidenceItems,
+      evidenceItems,
       voiceNotes: state.voiceNotes,
       technicianId: user?.id,
       technicianName: user?.name,
       savedAt: new Date().toISOString(),
     };
 
-    offlineStorage.saveDraft(localDraft);
+    offlineStorage.saveDraft(localDraft, notify);
     await persist();
   };
+
+  const saveDraft = () => saveSubmissionDraft(undefined, state.evidenceItems, true);
 
   const submitCase = async (): Promise<WarrantyCase> => {
     const submittingUser = user?.id;
     const submittingToken = apiClient.getToken();
+    const apiUrl = ENV.API_URL;
+    const isCurrentSession = () => apiClient.getToken() === submittingToken && ENV.API_URL === apiUrl;
+    const requireSession = () => {
+      if (!isCurrentSession()) throw new Error('Session changed. Sign in to resume your saved draft.');
+    };
+    if (!submittingUser || !submittingToken) throw new Error('Sign in to submit your warranty case.');
+
+    let submission = offlineStorage.getDraft(draftId)?.submission;
+    if (submission && submission.apiUrl !== apiUrl) {
+      throw new Error('Open this draft using the server where the submission was started.');
+    }
+    const evidenceItems = state.evidenceItems.map(item => ({ ...item }));
+    await saveSubmissionDraft(submission, evidenceItems);
     // Generate DTO with solid defaults matching backend DTO schema
     const dto = {
       siteId: state.siteId || 'site_cranbourne_byd',
@@ -632,24 +659,30 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       voiceNotes: await serializeMedia(state.voiceNotes || []),
     };
 
-    let createdCase: WarrantyCase | undefined;
     try {
+      requireSession();
       const isExistingServerCase =
         state.caseId &&
         !state.caseId.startsWith('CASE-') &&
         !state.caseId.startsWith('local_') &&
         !state.caseId.startsWith('draft_');
 
-      if (isExistingServerCase) {
-        createdCase = await casesApi.updateCase(state.caseId!, dto);
-      } else {
-        createdCase = await casesApi.createCase(dto);
-        setState(previous => ({ ...previous, caseId: createdCase!.id }));
+      if (!submission) {
+        const serverCase = isExistingServerCase
+          ? await casesApi.updateCase(state.caseId!, dto)
+          : await casesApi.createCase(dto);
+        requireSession();
+        if (!serverCase?.id) throw new Error('The server did not return a warranty case ID.');
+        submission = { caseId: serverCase.id, apiUrl };
+        await saveSubmissionDraft(submission, evidenceItems);
       }
+      const serverCaseId = submission.caseId;
 
       // Upload each captured evidence file
-      if (state.evidenceItems && state.evidenceItems.length > 0) {
-        for (const ev of state.evidenceItems) {
+      if (evidenceItems.length > 0) {
+        for (const ev of evidenceItems) {
+          if (ev.isUploaded) continue;
+          requireSession();
           try {
             if (isLocalMedia(ev.fileUri)) {
               const formData = new FormData();
@@ -673,9 +706,10 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 formData.append('ocrExtractedText', ev.ocrExtractedText);
               }
 
-              await casesApi.uploadEvidenceFile(createdCase.id, formData);
+              requireSession();
+              await casesApi.uploadEvidenceFile(serverCaseId, formData);
             } else if (ev.storageUrl && !ev.storageUrl.startsWith('file://') && !ev.storageUrl.startsWith('content://')) {
-              await casesApi.addEvidence(createdCase.id, {
+              await casesApi.addEvidence(serverCaseId, {
                 ruleKey: ev.ruleKey,
                 name: ev.ruleName || ev.ruleKey,
                 mediaType: (ev.mediaType as any) || 'image',
@@ -684,7 +718,10 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 ocrConfidence: ev.ocrConfidence,
                 durationSeconds: ev.durationSeconds,
               });
-            }
+            } else continue;
+            requireSession();
+            ev.isUploaded = true;
+            await saveSubmissionDraft(submission, evidenceItems);
           } catch (uploadErr) {
             console.warn(`[CaseWizardContext] Upload failed for evidence ${ev.ruleKey}:`, uploadErr);
             throw uploadErr;
@@ -693,7 +730,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
 
       // Submit from workshop to trigger CRM status transition
-      const submitted = await casesApi.submitFromWorkshop(createdCase.id, {
+      requireSession();
+      const submitted = await casesApi.submitFromWorkshop(serverCaseId, {
         checklistSummary: {
           totalMandatory: state.mandatoryCount,
           completedMandatory: state.completedMandatoryCount || state.evidenceItems.length,
@@ -702,21 +740,25 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       });
 
       console.log('[CaseWizardContext] Case submitted to backend CRM successfully:', submitted.id);
-      offlineStorage.removeDraft(state.caseId || `draft_${state.roNumber}`);
+      if (isCurrentSession()) offlineStorage.removeDraft(draftId);
       return submitted;
     } catch (err: any) {
-      if (err?.statusCode === 401 || err?.statusCode === 403) {
-        throw new Error('Authentication expired. Please sign in again to submit.');
+      if (err?.statusCode === 401) {
+        throw new Error('Your session ended. Sign in again and look for your draft in Warranty Capture.');
+      }
+      if (err?.statusCode === 403) {
+        throw new Error(err.message || 'Your account does not have permission to submit this case.');
       }
       if (err?.statusCode >= 400 && err?.statusCode < 500) {
         throw new Error(err.message || 'Case submission failed validation. Please check your data.');
       }
 
-      if (JSON.parse(sessionStorage.getItem('booran-user') || 'null')?.id !== submittingUser || apiClient.getToken() !== submittingToken) throw new Error('Session changed. Sign in to resume this draft.');
+      requireSession();
       console.warn('[CaseWizardContext] Network connection error, queuing offline:', err?.message || err);
       // If truly offline / unreachable, save to pending queue
       const mockSubmitted: WarrantyCase = {
-        id: createdCase?.id || state.caseId || `CASE-${(state.roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '')}-${Date.now().toString().slice(-4)}`,
+        id: submission?.caseId || draftId,
+        submission,
         ...dto,
         status: 'Uploading',
         technicianId: user?.id || 'usr_tech_1',
@@ -726,8 +768,10 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         updatedAt: new Date().toISOString(),
       };
 
-      mockSubmitted.evidenceItems = state.evidenceItems;
+      mockSubmitted.evidenceItems = evidenceItems;
       offlineStorage.queuePendingUpload(mockSubmitted);
+      await persist();
+      offlineStorage.removeDraft(draftId);
       await persist();
       return mockSubmitted;
     }

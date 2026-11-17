@@ -158,6 +158,49 @@ test('all seven warranty wizard steps accept real case data and submit the pack'
   await expect(page.getByText('Warranty Pack Submitted!', { exact: true })).toBeVisible();
   expect(submitted).toBe(true); expect(saved.vin).toBe('LGXCE4C86P0019283'); expect(saved.voiceNotes[0].transcript).toContain('cooling circuit');
 });
+test('resumes a saved warranty submission after a 401 and sign-in', async ({ page }) => {
+  await signedIn(page);
+  const caseId = 'CASE-CRAUTH-1234';
+  let creates = 0;
+  let saved: any;
+  const submissions: string[] = [];
+  await page.route('**/api/v1/warranty-cases**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'POST' && path.endsWith('/warranty-cases')) {
+      creates++;
+      saved = { ...route.request().postDataJSON(), id: caseId };
+      await route.fulfill({ json: saved });
+    } else if (path.endsWith('/submit-from-workshop')) {
+      submissions.push(path);
+      if (submissions.length === 1) {
+        await route.fulfill({ status: 401, json: { message: 'Your session has expired.' } });
+      } else {
+        await route.fulfill({ json: { ...saved, status: 'Awaiting Review' } });
+      }
+    } else {
+      await route.fulfill({ json: [] });
+    }
+  });
+
+  await page.getByText('Warranty Capture', { exact: true }).click();
+  await page.getByText('Start New Case', { exact: true }).click();
+  await page.getByPlaceholder('e.g. CR-21693').fill('CR-AUTH-RECOVERY');
+  await page.getByText('Review', { exact: true }).click();
+  await page.getByText('Submit Warranty Case', { exact: true }).click();
+
+  await expect(page.getByText('Your session ended.', { exact: false })).toBeVisible();
+  await page.getByPlaceholder('Username or email').fill(user.email);
+  await page.getByPlaceholder('Enter your password').fill('fixture-password');
+  await page.getByText('Sign In', { exact: true }).last().click();
+  await page.getByText('Warranty Capture', { exact: true }).click();
+  await page.getByText('CR-AUTH-RECOVERY', { exact: true }).click();
+  await page.getByText('Submit Warranty Case', { exact: true }).click();
+
+  await expect(page.getByText('Warranty Pack Submitted!', { exact: true })).toBeVisible();
+  expect(creates).toBe(1);
+  expect(submissions).toEqual(Array(2).fill(`/api/v1/warranty-cases/${caseId}/submit-from-workshop`));
+});
+
 test('production service worker precaches the app and can reopen offline', async ({ page, context }) => {
   await fixtures(page); await page.goto('/'); await expect(page.getByText('First Login Activation', { exact: true })).toBeVisible();
   await page.evaluate(async () => { await navigator.serviceWorker.ready; });

@@ -48,11 +48,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     login,
     registerTechnician,
     isLoading,
+    sessionEnded,
   } = useAuth();
   const { serverUrl, setServerUrl, isOnline, checkConnectivity } = useNetwork();
 
   // Mode: PIN_SETUP (First Login Flow) or SIGN_IN (Existing User Login)
-  const [activeTab, setActiveTab] = useState<AuthTab>('PIN_SETUP');
+  const [activeTab, setActiveTab] = useState<AuthTab>(sessionEnded ? 'SIGN_IN' : 'PIN_SETUP');
 
   // PIN Setup Phase: 1 = Enter PIN, 2 = Set Username, Password & Specific Sites
   const [pinStep, setPinStep] = useState<1 | 2>(1);
@@ -333,10 +334,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </TouchableOpacity>
       </View>
 
-      {authError && (
+      {(authError || sessionEnded) && (
         <View style={styles.errorBanner}>
           <Icon name="alert-circle" size={17} color={colors.danger} />
-          <Text style={styles.errorText}>{authError}</Text>
+          <Text style={styles.errorText}>{authError || 'Your session ended. Sign in again and look for your draft in Warranty Capture.'}</Text>
         </View>
       )}
 

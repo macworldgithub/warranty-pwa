@@ -28,8 +28,9 @@ export async function syncInBackground() {
     for (const [, item] of snapshot.uploads || []) {
       if (!(await current())) break;
       if (item.technicianId && item.technicianId !== session.userId) continue;
+      if (item.submission && item.submission.apiUrl !== session.apiUrl) continue;
       try {
-        await replayCase(item, api, async oldId => { await patch('uploads', item.id, item, oldId); }, current);
+        await replayCase(item, api, session.apiUrl, async oldId => { await patch('uploads', item.id, item, oldId); }, current);
         await patch('uploads', item.id);
         await patch('drafts', `draft_${item.roNumber}`);
       } catch { failures++; }

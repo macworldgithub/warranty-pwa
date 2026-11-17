@@ -26,18 +26,23 @@ export async function evidenceForm(item: any, roNumber?: string) {
 }
 // The page and service worker use exactly the same replay sequence. Checkpoints
 // preserve server IDs and uploaded evidence when a later request is interrupted.
-export async function replayCase(item: WarrantyCase, api: ReplayApi, checkpoint: (oldId?: string) => Promise<void>, isCurrent = async () => true) {
+export async function replayCase(item: WarrantyCase, api: ReplayApi, apiUrl: string, checkpoint: (oldId?: string) => Promise<void>, isCurrent: () => Promise<boolean>) {
   const requireSession = async () => { if (!(await isCurrent())) throw new Error('Session changed. Sign in to continue synchronization.'); };
   await requireSession();
-  const dto = { ...caseFields(item), voiceNotes: await serializeMedia(item.voiceNotes || []) };
-  if (/^(CASE-|local_|draft_)/.test(item.id)) {
-    const created = await api.createCase({ ...dto, evidenceItems: [] });
-    if (!created?.id) throw new Error('Server did not return a case ID.');
-    const oldId = item.id; item.id = created.id;
+  if (!item.submission) {
+    const dto = { ...caseFields(item), voiceNotes: await serializeMedia(item.voiceNotes || []) };
+    await requireSession();
+    const oldId = item.id;
+    if (/^(CASE-|local_|draft_)/.test(item.id)) {
+      const created = await api.createCase({ ...dto, evidenceItems: [] });
+      if (!created?.id) throw new Error('Server did not return a case ID.');
+      item.id = created.id;
+    } else {
+      // Preserve existing evidence when replaying case field edits.
+      await api.updateCase(item.id, dto);
+    }
+    item.submission = { caseId: item.id, apiUrl };
     await checkpoint(oldId);
-  } else {
-    // Never clear evidence when replaying field edits to an existing case.
-    await api.updateCase(item.id, dto);
   }
   for (const evidence of item.evidenceItems || []) {
     if (evidence.isUploaded) continue;

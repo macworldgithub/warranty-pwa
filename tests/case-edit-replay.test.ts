@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
+vi.mock('../src/config/env', () => ({ ENV: { API_URL: 'https://warranty.test/api/v1' } }));
 const api = vi.hoisted(() => ({ createCase: vi.fn(), updateCase: vi.fn(), addVoiceNotes: vi.fn(), uploadEvidenceFile: vi.fn(), submitFromWorkshop: vi.fn() }));
 vi.mock('../src/api', () => ({ casesApi: api }));
 vi.mock('../src/api/client', () => ({ apiClient: { getToken: () => 'audit-token' } }));

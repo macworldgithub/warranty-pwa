@@ -20,6 +20,7 @@ import { Badge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { Header } from '../../components/common/Header';
 import { Tabs, TabItem } from '../../components/common/Tabs';
+import { ENV } from '../../config/env';
 import { BottomNavBar } from '../../components/common/BottomNavBar';
 import { useAuth } from '../../context/AuthContext';
 import { useCaseWizard } from '../../context/CaseWizardContext';
@@ -164,9 +165,11 @@ export const CaseListScreen: React.FC<CaseListScreenProps> = ({
       const pending = isAdmin ? [] : [...offlineStorage.getPendingUploads(), ...offlineStorage.getDraftCases()];
       const serverList: WarrantyCase[] = Array.isArray(data) ? data : ((data as any)?.data ?? []);
       const serverIds = new Set(serverList.map((c: WarrantyCase) => c.id));
+      const recoverable = new Set(pending.filter(caseItem => caseItem.submission?.apiUrl === ENV.API_URL)
+        .map(caseItem => caseItem.submission!.caseId));
       const merged: WarrantyCase[] = [
-        ...pending.filter((p) => !serverIds.has(p.id)),
-        ...serverList,
+        ...pending.filter(caseItem => !serverIds.has(caseItem.id) || recoverable.has(caseItem.id)),
+        ...serverList.filter(caseItem => !recoverable.has(caseItem.id)),
       ];
 
       // Merge local offline vehicle evidence items into each warranty case

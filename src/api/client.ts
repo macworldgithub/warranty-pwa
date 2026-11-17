@@ -26,6 +26,12 @@ class ApiClient {
     this.onUnauthorizedCallback = callback;
   }
 
+  private handleUnauthorized(response: Response, authorization?: string) {
+    if (response.status === 401 && this.token && authorization === `Bearer ${this.token}`) {
+      this.onUnauthorizedCallback?.();
+    }
+  }
+
   public async request<T = any>(
     endpoint: string,
     options: RequestInit = {}
@@ -62,22 +68,19 @@ class ApiClient {
       clearTimeout(timeoutId);
 
       const contentType = response.headers.get('content-type');
+      if (!response.ok) this.handleUnauthorized(response, headers.Authorization);
       let data: any = null;
 
       if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+        data = response.ok ? await response.json() : await response.json().catch(() => undefined);
       } else {
         data = await response.text();
       }
 
       if (!response.ok) {
-        if (response.status === 401 && this.onUnauthorizedCallback && headers.Authorization === `Bearer ${this.token}`) {
-          this.onUnauthorizedCallback();
-        }
-
         const errorMessage =
-          (data && data.message) ||
           (Array.isArray(data?.message) ? data.message.join(', ') : null) ||
+          data?.message ||
           data?.error ||
           `HTTP ${response.status}: ${response.statusText}`;
         
@@ -165,11 +168,16 @@ class ApiClient {
 
       clearTimeout(timeoutId);
 
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data?.message || 'Upload failed');
+        this.handleUnauthorized(response, headers.Authorization);
+        const data = await response.json().catch(() => undefined);
+        const message = Array.isArray(data?.message) ? data.message.join(', ') : data?.message;
+        throw Object.assign(new Error(message || `Upload failed (HTTP ${response.status})`), {
+          statusCode: response.status,
+          data,
+        });
       }
-      return data as T;
+      return await response.json() as T;
     } catch (error: any) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {

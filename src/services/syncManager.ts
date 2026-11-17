@@ -5,6 +5,7 @@ import { offlineStorage } from './offlineStorage';
 import { isLocalMedia } from '../../web/storage';
 import { replayCase, replayInspection } from '../../web/replay';
 import { getOutboxJobs, getSyncSession, isSyncSessionCurrent, replayOutbox, requestBackgroundSync, withSyncLock } from '../../web/outbox';
+import { ENV } from '../config/env';
 
 export interface SyncStatus { isSyncing: boolean; pendingCount: number; lastSyncTime?: string; error?: string }
 class SyncManager {
@@ -20,11 +21,12 @@ class SyncManager {
     if (this.isSyncing) return { synced: 0, failed: 0 };
     let user; try { user = JSON.parse(sessionStorage.getItem('booran-user') || 'null'); } catch {}
     const token = apiClient.getToken();
+    const apiUrl = ENV.API_URL;
     if (!token || !user?.id) return { synced: 0, failed: 0 };
     this.isSyncing = true; await this.notify();
     const current = async () => {
       let currentUser; try { currentUser = JSON.parse(sessionStorage.getItem('booran-user') || 'null'); } catch {}
-      return currentUser?.id === user.id && apiClient.getToken() === token;
+      return currentUser?.id === user.id && apiClient.getToken() === token && ENV.API_URL === apiUrl;
     };
     try {
       const result = await withSyncLock(async () => {
@@ -32,8 +34,9 @@ class SyncManager {
         const pending = offlineStorage.getPendingUploads().filter(item => !item.technicianId || item.technicianId === user.id);
         for (const item of pending) {
           if (!(await current())) break;
+          if (item.submission && item.submission.apiUrl !== apiUrl) continue;
           try {
-            await replayCase(item, casesApi, async oldId => {
+            await replayCase(item, casesApi, apiUrl, async oldId => {
               if (!(await current())) throw new Error('Session changed.');
               if (oldId) offlineStorage.removePendingUpload(oldId);
               offlineStorage.queuePendingUpload(item); await persist();

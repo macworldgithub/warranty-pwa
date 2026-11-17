@@ -100,6 +100,7 @@ export interface ChecklistSummary {
 export interface WarrantyCase {
   _id?: string;
   id: string;
+  submission?: { caseId: string; apiUrl: string };
   siteId: string;
   siteName?: string;
   brandId: string;

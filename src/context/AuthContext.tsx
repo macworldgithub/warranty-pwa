@@ -17,6 +17,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  sessionEnded: boolean;
   activeSiteId: string;
   login: (email: string, password?: string) => Promise<User>;
   registerTechnician: (data: {
@@ -57,8 +58,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(apiClient.getToken());
   const [activeSiteId, setActiveSiteId] = useState<string>(() => getInitialSiteId(user));
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [sessionEnded, setSessionEnded] = useState(false);
 
   const logout = () => {
+    setSessionEnded(false);
     void setSyncSession(null);
     notificationsService.resetSession();
     sessionStorage.removeItem('booran-user');
@@ -82,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Configure 401 interceptor
     apiClient.setOnUnauthorized(() => {
       logout();
+      setSessionEnded(true);
     });
 
     const initAuth = async () => {
@@ -118,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sessionStorage.setItem('booran-user', JSON.stringify(currentUser));
       await setStorageUser(currentUser.id);
       await setSyncSession({ userId: currentUser.id, token: res.token, apiUrl: ENV.API_URL });
+      setSessionEnded(false);
       setUser(currentUser);
       if (res.token) {
         setToken(res.token);
@@ -216,6 +221,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated: !!user,
         isLoading,
+        sessionEnded,
         activeSiteId,
         login,
         registerTechnician,

@@ -276,7 +276,12 @@ function MainNavigator() {
           onOpenCase={(caseItem) => {
             setSelectedCase(caseItem);
             setPreviousScreen('LIST');
-            setCurrentScreen('DETAIL');
+            if (caseItem.status === 'Draft' && caseItem.submission) {
+              loadExistingCase(caseItem);
+              setCurrentScreen('WIZARD');
+            } else {
+              setCurrentScreen('DETAIL');
+            }
           }}
           onResolveFlag={(caseItem) => {
             setSelectedCase(caseItem);

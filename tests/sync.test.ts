@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { IDBFactory } from 'fake-indexeddb';
+vi.mock('../src/config/env', () => ({ ENV: { API_URL: 'https://warranty.test/api/v1' } }));
 const mocks = vi.hoisted(() => ({ createCase: vi.fn(), updateCase: vi.fn(), uploadEvidenceFile: vi.fn(), addEvidence: vi.fn(), submitFromWorkshop: vi.fn(), getToken: vi.fn() }));
 vi.mock('../src/api', () => ({ casesApi: mocks }));
 vi.mock('../src/api/client', () => ({ apiClient: { getToken: mocks.getToken } }));
@@ -25,9 +26,12 @@ it('sends binary evidence before submitting and removes a successful queue entry
 });
 it('retries an interrupted upload using the existing server case', async () => {
   const { offlineStorage, syncManager } = await setup(); mocks.uploadEvidenceFile.mockRejectedValueOnce(new Error('Disconnected'));
+  mocks.createCase.mockResolvedValue({ id: 'CASE-RO123-1234' });
   expect(await syncManager.syncPendingCases()).toEqual({ synced: 0, failed: 1 });
-  expect(offlineStorage.getPendingUploads()[0].id).toBe('server-case-1');
+  expect(offlineStorage.getPendingUploads()[0].id).toBe('CASE-RO123-1234');
   expect(await syncManager.syncPendingCases()).toEqual({ synced: 1, failed: 0 }); expect(mocks.createCase).toHaveBeenCalledTimes(1);
+  expect(mocks.updateCase).not.toHaveBeenCalled();
+  expect(mocks.submitFromWorkshop.mock.calls[0][0]).toBe('CASE-RO123-1234');
 });
 it('keeps another technician’s queued case out of the current session', async () => {
   const { offlineStorage, syncManager } = await setup(); const other = { ...offlineStorage.getPendingUploads()[0], id: 'local_other', technicianId: 'tech-2' }; offlineStorage.queuePendingUpload(other);
