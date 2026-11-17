@@ -42,8 +42,9 @@ test('administrator creates, edits and deletes a user through the UI', async ({ 
   await page.getByText('+ Add User', { exact: true }).click(); await page.getByPlaceholder('E.g., John Smith').fill('Created Workflow User');
   await page.getByPlaceholder('E.g., jsmith@booran.com.au').fill('new-user@example.test'); await page.getByText('Create Account', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'User Created', exact: true })).toBeVisible(); await page.getByRole('button', { name: 'OK', exact: true }).click();
-  await page.getByLabel('Edit user Created Workflow User', { exact: true }).click(); await page.getByPlaceholder('User name').fill('Updated Workflow User'); await page.getByText('Save Changes', { exact: true }).click();
+  await page.getByLabel('Edit user Created Workflow User', { exact: true }).click(); await expect(page.getByPlaceholder('User name')).toHaveValue('Created Workflow User'); await page.getByPlaceholder('User name').fill('Updated Workflow User'); await expect(page.getByPlaceholder('User name')).toHaveValue('Updated Workflow User'); await page.getByText('Save Changes', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Rooftop & User Updated' })).toBeVisible(); await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await expect.poll(() => state.users.find((item: any) => item.id === 'created-user')?.name).toBe('Updated Workflow User');
   await page.getByLabel('Delete user Updated Workflow User', { exact: true }).click(); await page.getByRole('button', { name: 'Delete Account', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'User Deleted', exact: true })).toBeVisible(); expect(state.users).toHaveLength(1);
 });

@@ -1,21 +1,17 @@
 import { getOutboxJobs } from './outbox';
 import React from 'react';
 export function PwaControls() {
-  const [install, setInstall] = React.useState<any>(null);
   const [waiting, setWaiting] = React.useState<ServiceWorker | null>(null);
   const [notice, setNotice] = React.useState('');
   const [pending, setPending] = React.useState(0);
   const [syncing, setSyncing] = React.useState(false);
   const [pushEnabled, setPushEnabled] = React.useState(false);
   React.useEffect(() => {
-    const prompt = (event: Event) => { event.preventDefault(); setInstall(event); };
     const update = (event: any) => setWaiting(event.detail);
     const storageError = () => setNotice('Device storage is full. Free space before capturing more evidence.');
-    const installed = () => setInstall(null);
-    window.addEventListener('beforeinstallprompt', prompt); window.addEventListener('appinstalled', installed);
     window.addEventListener('pwa-update', update); window.addEventListener('storage-error', storageError);
     if ('Notification' in window) setPushEnabled(Notification.permission === 'granted');
-    return () => { window.removeEventListener('beforeinstallprompt', prompt); window.removeEventListener('appinstalled', installed); window.removeEventListener('pwa-update', update); window.removeEventListener('storage-error', storageError); };
+    return () => { window.removeEventListener('pwa-update', update); window.removeEventListener('storage-error', storageError); };
   }, []);
   React.useEffect(() => {
     let disposed = false, unsubscribe: (() => void) | undefined;
@@ -46,7 +42,6 @@ export function PwaControls() {
   return <div className="pwa-controls">
     {notice && <button className="pwa-status" onClick={() => setNotice('')} aria-label="Dismiss message">{notice}</button>}
     {pending > 0 && <button disabled={syncing} onClick={retry}>{syncing ? 'Syncing changes...' : pending + ' changes waiting to sync'}</button>}
-    {install && <button onClick={async () => { await install.prompt(); const choice = await install.userChoice; if (choice.outcome === 'accepted') setInstall(null); }}>Install app</button>}
     {waiting && <button onClick={() => waiting.postMessage({ type: 'SKIP_WAITING' })}>Update app</button>}
     {!pushEnabled && import.meta.env.VITE_FIREBASE_APP_ID && 'Notification' in window && <button onClick={() => enableNotifications().catch(e => setNotice(e.message))}>Enable notifications</button>}
   </div>;

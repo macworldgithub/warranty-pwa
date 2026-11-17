@@ -1,4 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
+const testTemp = path.resolve('.tmp/browser'); fs.mkdirSync(testTemp, { recursive: true });
+process.env.TEMP = testTemp; process.env.TMP = testTemp; process.env.TMPDIR = testTemp;
 // Start Vite directly so Windows can reliably terminate the exact preview process.
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', '4173', '--strictPort'], { stdio: 'inherit', windowsHide: true });
 try {

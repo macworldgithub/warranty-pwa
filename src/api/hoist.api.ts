@@ -1,4 +1,4 @@
-import { durableMutation, getLocalRecords, mergePendingRecords, cacheRecords } from '../../web/outbox';
+import { durableMutation, getLocalRecords, mergePendingRecords, cacheRecords, getOutboxJobs, getSyncSession } from '../../web/outbox';
 import { apiClient } from './client';
 import {
   Hoist,
@@ -557,8 +557,21 @@ const INITIAL_INSPECTIONS: HoistInspection[] = [
 ];
 
 // In-Memory Global Store for resilient offline / online performance
-let memoryHoists = [...INITIAL_HOISTS];
-let memoryInspections = [...INITIAL_INSPECTIONS];
+let memoryHoists: Hoist[] = [];
+let memoryInspections: HoistInspection[] = [];
+let memoryScope = '';
+async function ensureMemoryScope() {
+  const session = await getSyncSession();
+  const scope = session ? session.userId + ':' + session.apiUrl : 'signed-out';
+  if (scope !== memoryScope) { memoryScope = scope; memoryHoists = []; memoryInspections = []; }
+}
+async function overlayPendingInspections(hoists: Hoist[]): Promise<Hoist[]> {
+  const jobs = await getOutboxJobs();
+  return hoists.map(hoist => {
+    const pending = jobs.filter(job => job.collection === 'hoist-inspections' && job.optimistic?.hoistId === hoist.id).at(-1)?.optimistic;
+    return pending ? { ...hoist, lastInspectionDate: pending.signedAt, lastInspectionStatus: pending.status, lastInspectedBy: pending.inspectorId, lastInspectedByName: pending.inspectorName, status: pending.status === 'TAGGED_OUT' ? 'OUT_OF_SERVICE' : pending.status === 'FAULT_IDENTIFIED' ? 'FAULT_IDENTIFIED' : 'OPERATIONAL', lockoutTagoutActive: pending.lockoutTagoutApplied, activeFaultNotes: pending.faultNotes, syncPending: true } as Hoist : hoist;
+  });
+}
 
 function computeSummary(facility?: string): HoistSummary {
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -592,6 +605,7 @@ function computeSummary(facility?: string): HoistSummary {
 
 export const hoistApi = {
   getHoists: async (facility?: string, siteId?: string): Promise<Hoist[]> => {
+    await ensureMemoryScope();
     try {
       const params = new URLSearchParams();
       if (facility && facility !== 'all') params.append('facility', facility);
@@ -599,17 +613,19 @@ export const hoistApi = {
       const query = params.toString() ? `?${params.toString()}` : '';
       const data = await apiClient.get<Hoist[]>(`/hoists${query}`);
       if (Array.isArray(data)) {
-        memoryHoists = await mergePendingRecords('hoists', data);
+        memoryHoists = await overlayPendingInspections(await mergePendingRecords('hoists', data));
         return memoryHoists;
       }
     } catch {
       // Fallback to local store
     }
     const cached = await getLocalRecords('hoists');
-    return (await mergePendingRecords('hoists', cached)).filter(h => (!facility || facility === 'all' || h.facility === facility) && (!siteId || h.siteId === siteId));
+    return (await overlayPendingInspections(await mergePendingRecords('hoists', cached))).filter(h => (!facility || facility === 'all' || h.facility === facility) && (!siteId || h.siteId === siteId));
   },
 
   getSummary: async (facility?: string): Promise<HoistSummary> => {
+    await ensureMemoryScope();
+    if ((await getOutboxJobs()).some(job => ['hoists', 'hoist-inspections'].includes(job.collection))) { memoryHoists = await hoistApi.getHoists(facility); return computeSummary(facility); }
     try {
       const query = facility && facility !== 'all' ? `?facility=${facility}` : '';
       const data = await apiClient.get<HoistSummary>(`/hoists/summary${query}`);
@@ -619,22 +635,25 @@ export const hoistApi = {
     } catch {
       // Fallback to local store calculation
     }
+    memoryHoists = await hoistApi.getHoists(facility);
     return computeSummary(facility);
   },
 
   getHoistById: async (id: string): Promise<Hoist> => {
+    await ensureMemoryScope();
     try {
       const data = await apiClient.get<Hoist>(`/hoists/${id}`);
       if (data) return data;
     } catch {
       // Fallback
     }
-    const found = memoryHoists.find((h) => h.id === id);
+    const found = (await getLocalRecords('hoists')).find((h) => h.id === id);
     if (found) return found;
     throw new Error('Hoist not found');
   },
 
   submitInspection: async (payload: SubmitInspectionPayload): Promise<HoistInspection> => {
+    await ensureMemoryScope();
     const todayStr = new Date().toISOString().slice(0, 10);
     const hoistIndex = memoryHoists.findIndex((h) => h.id === payload.hoistId);
 

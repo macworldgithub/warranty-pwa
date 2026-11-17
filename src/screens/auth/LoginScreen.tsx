@@ -21,6 +21,7 @@ import { useNetwork } from '../../context/NetworkContext';
 import { ForgotPasswordModal } from '../../components/auth/ForgotPasswordModal';
 import { sitesApi } from '../../api/sites.api';
 import { Site } from '../../types';
+import { InstallAppButton } from '../../../web/InstallAppButton';
 
 import booranLogo from '../../assets/images/booran-motors-transparent.png';
 
@@ -558,6 +559,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </View>
       )}
 
+      <InstallAppButton compact />
       <Text style={styles.footer}>Booran Motor Group • Warranty Evidence Capture</Text>
 
       {/* Dealership Sites Modal */}

@@ -138,6 +138,7 @@ export const ReturnLoanerModal: React.FC<ReturnLoanerModalProps> = ({
         throw apiErr;
       }
 
+      if ((updated as any).syncPending) Alert.alert('Return Saved Offline', 'Return details are saved on this device and will sync when connected.');
       onReturnCompleted(updated);
       onClose();
     } catch (err: any) {

@@ -21,7 +21,8 @@ it('replays offline creates before dependent updates using the confirmed server 
 });
 it('does not convert a server validation failure into offline success', async () => {
   const box = await setup(); vi.stubGlobal('fetch', vi.fn(async () => Response.json({ message: 'Invalid licence number' }, { status: 400 })));
-  await expect(box.durableMutation({ method: 'POST', endpoint: '/loan-agreements/issue', body: {}, optimistic: {} })).rejects.toThrow('Invalid licence number');
+  await expect(box.durableMutation({ method: 'POST', endpoint: '/loan-agreements/issue', body: {}, collection: 'loans', optimistic: { id: 'invalid-local-loan' } })).rejects.toThrow('Invalid licence number');
+  expect(await box.getLocalRecords('loans')).toHaveLength(0);
   expect(await box.getOutboxJobs()).toHaveLength(0);
 });
 it('keeps accounts and backend hosts separate and cancels replay after logout', async () => {

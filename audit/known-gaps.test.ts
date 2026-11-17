@@ -9,8 +9,7 @@ beforeEach(() => {
   vi.stubGlobal('window', { dispatchEvent: vi.fn() });
   api.submitFromWorkshop.mockResolvedValue({ id: 'server-case-existing' });
 });
-// Expected-failure tests document defects found by the audit. They are separate
-// from the normal test suite. Remove .fails once the defect is actually fixed.
+// Ordinary regression for the resolved audit defect; also covered in tests/.
 it('regression: offline edits to an existing server case must be replayed before submission', async () => {
   const storage = await import('../web/storage'); await storage.initializeStorage();
   const { offlineStorage } = await import('../src/services/offlineStorage');

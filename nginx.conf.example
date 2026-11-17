@@ -21,6 +21,8 @@ server {
         proxy_ssl_server_name on;
         proxy_set_header Host warranty-evidence.omnisuiteai.com;
     }
+    # Optional: npm run serve provides the authenticated Firebase topic bridge.
+    location /pwa-api/ { proxy_pass http://127.0.0.1:4173; }
     location = /sw.js { add_header Cache-Control "no-cache, no-store, must-revalidate"; }
     location = /index.html { add_header Cache-Control "no-cache"; }
     location /assets/ { add_header Cache-Control "public, max-age=31536000, immutable"; }

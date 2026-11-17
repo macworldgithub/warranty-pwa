@@ -1,5 +1,5 @@
 import { QRCodeWriter, BarcodeFormat } from '@zxing/library';
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page, chromium } from '@playwright/test';
 test.use({ launchOptions: { args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'] } });
 const user = { id: 'test-tech', name: 'Test Technician', email: 'test@example.com', role: 'TECHNICIAN', defaultSiteId: 'site_cranbourne_byd', authorizedSiteIds: ['site_cranbourne_byd'] };
 const site = { id: 'site_cranbourne_byd', name: 'Booran BYD Cranbourne', code: 'CRN_BYD', isActive: true, authorizedBrands: ['brand_byd'] };
@@ -48,8 +48,86 @@ for (const menu of ['Vehicle Inspection', 'Internal Test Drive', 'Warranty Captu
 }
 test('desktop uses the same working screens without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 }); await signedIn(page);
+  await expect.poll(() => page.getByRole('img', { name: 'Booran Motors', exact: true }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
   await page.screenshot({ path: 'test-results/home-desktop.png' });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('home keeps the mobile two-column menu after resizing and rotation', async ({ page }) => {
+  await signedIn(page);
+  await expect(page.getByRole('img', { name: 'Booran Motors', exact: true })).toBeVisible();
+  const grid = page.getByTestId('home-tool-grid');
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 320, height: 740 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect.poll(async () => {
+      const bounds = await grid.boundingBox();
+      const cards = await grid.locator(':scope > div').evaluateAll(elements => elements.map(element => {
+        const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, right: box.right };
+      }));
+      return cards.length === 5 && cards.every(card => Math.abs(card.width - (bounds!.width - 12) / 2) < 1 && card.right <= viewport.width)
+        && Math.abs(cards[0].y - cards[1].y) < 1 && cards[2].y > cards[0].y && cards[1].x > cards[0].x;
+    }).toBe(true);
+  }
+});
+
+test('install action uses the browser prompt once and hides after installation', async ({ page }) => {
+  await fixtures(page);
+  // Deliver an install event as soon as the bundle registers its listener, before React mounts.
+  await page.addInitScript(() => {
+    const add = window.addEventListener.bind(window);
+    window.addEventListener = ((type: string, listener: any, options: any) => {
+      add(type, listener, options);
+      if (type === 'beforeinstallprompt') queueMicrotask(() => {
+        const event = new Event('beforeinstallprompt', { cancelable: true });
+        Object.assign(event, { prompt: async () => { (window as any).installPrompts = ((window as any).installPrompts || 0) + 1; }, userChoice: Promise.resolve({ outcome: 'dismissed' }) });
+        window.dispatchEvent(event);
+      });
+    }) as typeof window.addEventListener;
+  });
+  await page.goto('/');
+  const install = page.getByRole('button', { name: 'Install app', exact: true });
+  await install.click();
+  expect(await page.evaluate(() => (window as any).installPrompts)).toBe(1);
+  await install.click();
+  await expect(page.getByRole('alertdialog')).toContainText('install icon');
+  expect(await page.evaluate(() => (window as any).installPrompts)).toBe(1);
+  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+  await expect(install).toHaveCount(0);
+});
+
+test('iPhone install action explains Add to Home Screen', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1' }));
+  await signedIn(page);
+  await page.getByText('Profile & settings', { exact: true }).click();
+  await page.getByRole('button', { name: 'Install app', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('Add to Home Screen');
+});
+
+test('production app has valid install metadata and correctly sized branded icons', async ({}, testInfo) => {
+  // Regular Playwright contexts are incognito, where Chrome intentionally blocks installation.
+  const context = await chromium.launchPersistentContext(testInfo.outputPath('install-profile'), { channel: 'chrome', headless: true });
+  try {
+    const page = await context.newPage();
+    await fixtures(page); await page.goto('http://localhost:4173/');
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Page.enable');
+    const manifest = await cdp.send('Page.getAppManifest');
+    expect(manifest.errors).toEqual([]);
+    const data = JSON.parse(manifest.data!);
+    expect(data.display).toBe('standalone');
+    for (const icon of data.icons) {
+      const size = Number(icon.sizes.split('x')[0]);
+      const dimensions = await page.evaluate(async src => {
+        const img = new Image(); img.src = new URL(src, document.querySelector<HTMLLinkElement>('link[rel=manifest]')!.href).href;
+        await img.decode(); return [img.naturalWidth, img.naturalHeight];
+      }, icon.src);
+      expect(dimensions).toEqual([size, size]);
+    }
+    const errors = await cdp.send('Page.getInstallabilityErrors');
+    expect(errors.installabilityErrors).toEqual([]);
+  } finally { await context.close(); }
 });
 test('all seven warranty wizard steps accept real case data and submit the pack', async ({ page }) => {
   await signedIn(page);
@@ -131,7 +209,7 @@ test('decodes a real VIN barcode image from camera frames and saves the captured
     };
   },pixels);
   await signedIn(page);await page.getByText('Warranty Capture',{exact:true}).click();await page.getByText('Start New Case',{exact:true}).click();await page.getByText('Vehicle Info',{exact:true}).last().click();
-  await page.getByText('Scan Vehicle VIN Barcode',{exact:true}).click();
+  await page.getByText('Scan VIN Barcode',{exact:true}).click();
   await expect(page.getByPlaceholder('e.g. 1C4HJXDG4MW482702')).toHaveValue(vin,{timeout:15000});
   await expect(page.getByText('Retake Photo',{exact:true})).toBeVisible();
   expect(await page.evaluate(()=>Array.from(document.images).some(img=>img.src.startsWith('blob:')&&img.naturalWidth>0))).toBe(true);

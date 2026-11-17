@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   Image,
-  Dimensions,
   Platform,
   Alert,
 } from 'react-native';
@@ -46,8 +45,6 @@ import { LogoutDialog } from '../../components/common/LogoutDialog';
 import { WarrantyCase, LoanAgreement } from '../../types';
 
 import booranLogo from '../../assets/images/booran-motors-transparent.png';
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 interface TechnicianHomeScreenProps {
   onOpenVehicles: () => void;
   onOpenRoadTest: () => void;
@@ -478,7 +475,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
         <View style={styles.headerContent}>
           {/* Logo on Left */}
           <View style={styles.logoWrap}>
-            <Image source={{ uri: booranLogo }} style={styles.logoImage} resizeMode="contain" />
+            <Image accessibilityLabel="Booran Motors" source={{ uri: booranLogo }} style={styles.logoImage} resizeMode="contain" />
           </View>
 
           {/* Right Action Items: Off-site pill + Bell Button */}
@@ -583,7 +580,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
         <Text style={styles.sectionTitle}>APP MENU</Text>
 
         {/* 2x2 Tool Grid */}
-        <View style={styles.gridContainer}>
+        <View style={styles.gridContainer} testID="home-tool-grid">
           {/* Item 1: Vehicle Inspection */}
           <TouchableOpacity
             activeOpacity={0.8}
@@ -764,8 +761,6 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
     </View>
   );
 };
-
-const CARD_WIDTH = (SCREEN_WIDTH - 32 - 12) / 2;
 
 const styles = StyleSheet.create({
   container: {
@@ -1002,7 +997,8 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   gridCard: {
-    width: CARD_WIDTH,
+    // Size against the current container, including after rotation or resizing.
+    width: 'calc((100% - 12px) / 2)' as any,
     minHeight: 140,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,

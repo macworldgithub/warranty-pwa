@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { Header } from '../../components/common/Header';
 import { authApi } from '../../api/auth.api';
 import { sitesApi } from '../../api/sites.api';
 import { Site, User, UserRole } from '../../types';
+import { InstallAppButton } from '../../../web/InstallAppButton';
 
 interface ProfileScreenProps {
   onBack: () => void;
@@ -70,18 +71,20 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
   const isAdmin = user?.role === 'ADMIN';
   const isClerk = user?.role === 'CLERK';
 
-  // Load registered users from backend
+  const usersRequestVersion = useRef(0);
+  // Ignore directory responses that started before a later mutation.
   const loadUsers = async () => {
+    const version = ++usersRequestVersion.current;
     setLoadingUsers(true);
     try {
       const data = await authApi.getUsers();
-      if (Array.isArray(data)) {
+      if (version === usersRequestVersion.current && Array.isArray(data)) {
         setUsersList(data);
       }
     } catch (err: any) {
       console.log('Failed to fetch registered users:', err?.message || err);
     } finally {
-      setLoadingUsers(false);
+      if (version === usersRequestVersion.current) setLoadingUsers(false);
     }
   };
 
@@ -196,6 +199,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
       return;
     }
 
+    usersRequestVersion.current++;
     setCreateSubmitting(true);
     try {
       await authApi.createUser({
@@ -239,6 +243,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
       return;
     }
 
+    usersRequestVersion.current++;
     setEditSubmitting(true);
     try {
       await authApi.updateUser(editingUser.id, {
@@ -304,6 +309,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
           text: 'Delete Account',
           style: 'destructive',
           onPress: async () => {
+            usersRequestVersion.current++;
             setDeletingId(targetUser.id);
             try {
               await authApi.deleteUser(targetUser.id);
@@ -580,6 +586,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
           </View>
         )}
 
+        <InstallAppButton />
         <Text style={styles.versionFooter}>
           Booran Motors Warranty Capture · v1.0.0
         </Text>

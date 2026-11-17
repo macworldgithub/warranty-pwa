@@ -21,7 +21,7 @@ npm run build
 npm run preview
 ```
 
-Open http://localhost:4173. Chrome/Edge can install the app using the browser's install action or the app's install button when offered. On iPhone/iPad, open the deployed HTTPS site in Safari and use Share → Add to Home Screen. The development server deliberately does not register a service worker.
+Open http://localhost:4173. Choose **Install app** on the login screen or in **Profile & settings**. Chrome/Edge use the browser installation prompt when available; otherwise the button explains the browser's menu action. On iPhone/iPad, open the deployed HTTPS site in Safari and use Share → Add to Home Screen. The button is hidden in the installed app. Branded Booran icons include dedicated maskable and Apple Home Screen assets. The development server deliberately does not register a service worker.
 
 ## Included workflows
 
@@ -41,7 +41,7 @@ Camera capture uses a live browser viewfinder, microphone recording uses MediaRe
 
 The service worker precaches the application and OCR assets. IndexedDB stores drafts, inspection progress and media. Draft/queue maps are separated by technician. Previously fetched GET responses are cached by server URL and account, and are reused on connection failure. Captured object URLs are restored when the app reloads. Browser sessions survive reload; a new browser session requires sign-in.
 
-Warranty submissions retain evidence in a durable retry queue. Interrupted uploads reuse the case ID already created on the server. Reconnection retries queued cases and inspection evidence/notes while the app is open and signed in. An offline receipt says **Pending Upload**, rather than claiming server submission. Loan and hoist writes require server confirmation. The mobile app's existing seed/read fallbacks and explicit road-test demo mode are retained.
+Warranty submissions retain evidence in a durable retry queue. Interrupted uploads reuse the case ID already created on the server. Reconnection retries queued cases and inspection evidence/notes. The production service worker can also replay them after every app window closes on browsers supporting Background Sync; other browsers retry on reopening. Logout removes background authorization. Active drives restore their saved state and elapsed time after reload. An offline receipt says **Pending Upload**, rather than claiming server submission. Loan issue/sign/edit/return/delete, hoist inspection/update and road-test mutations also use a durable account/backend-scoped outbox. Offline confirmations state that changes are pending synchronization. The explicit road-test demo mode remains available; empty loan results are not replaced with fabricated agreements.
 
 ## Hosting and device requirements
 
@@ -62,4 +62,10 @@ npm run build
 npm run test:e2e
 ```
 
-Browser tests use the installed Google Chrome and isolated API fixtures. No real accounts or dealership records are created by the tests. See `VERIFICATION.md` for tested coverage and remaining live checks.
+Browser tests use the installed Google Chrome and isolated API fixtures. No real accounts or dealership records are created by the tests. See `IMPLEMENTATION_STATUS.md` and `VERIFICATION.md` for current completion status, tested coverage and device/live boundaries.
+
+## Optional production push bridge
+
+Firebase activation is currently deferred as requested. The implementation is ready in `server/push-topics.mjs`. It validates the backend bearer token through `/auth/me` and derives the same native topics from the verified user, using the server-only Firebase Admin SDK. Configure `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` on the server, set the public web/VAPID configuration before building, then run `npm run serve` behind HTTPS. Do not place Admin credentials in a `VITE_` variable or the public directory. `VITE_PUSH_BRIDGE_URL` can point to a separately hosted bridge; default is `/pwa-api/push/topics`. The bridge can also be integrated with an existing Node backend.
+
+On this Windows machine C: is full; verification uses the project `.tmp` directory on D: for temporary/browser files. The browser test runner sets this automatically.

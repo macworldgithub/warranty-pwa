@@ -189,14 +189,15 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
           style: 'destructive',
           onPress: async () => {
             try {
+              let pendingDeletion = false;
               try {
-                await loanAgreementsApi.deleteAgreement(agreement.id);
+                const result = await loanAgreementsApi.deleteAgreement(agreement.id); pendingDeletion = !!result.syncPending;
               } catch (apiErr) {
                 throw apiErr;
               }
               setAgreements((prev) => prev.filter((a) => a.id !== agreement.id));
               setDetailsTarget(null);
-              Alert.alert('Deleted', `Loan agreement ${agreement.agreementNumber} has been removed.`);
+              Alert.alert(pendingDeletion ? 'Deletion Saved Offline' : 'Deleted', pendingDeletion ? 'The record is removed from this device and its server deletion will sync when connected.' : `Loan agreement ${agreement.agreementNumber} has been removed.`);
             } catch (err: any) {
               Alert.alert('Error', err?.message || 'Failed to delete loan agreement.');
             }

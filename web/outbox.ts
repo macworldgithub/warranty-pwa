@@ -1,5 +1,5 @@
 import { get, set, del, entries, update } from 'idb-keyval';
-import { store, serializeMedia } from './storage';
+import { store, serializeMedia, isLocalMedia } from './storage';
 
 export interface SyncSession { userId: string; token: string; apiUrl: string }
 export interface OutboxJob {
@@ -27,7 +27,7 @@ export async function requestBackgroundSync() {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   const session = await getSyncSession(); if (!session) return;
   const state = await get<any>('state:' + session.userId, store);
-  const hasCases = state?.uploads?.length || state?.inspections?.some(([, inspection]: any) => inspection.evidenceItems?.some((item: any) => item.fileUri && !item.isUploaded) || (inspection.voiceNotes?.length && !inspection.voiceNotesSynced));
+  const hasCases = state?.uploads?.length || state?.inspections?.some(([, inspection]: any) => inspection.evidenceItems?.some((item: any) => isLocalMedia(item.fileUri) && !item.isUploaded) || (inspection.voiceNotes?.length && !inspection.voiceNotesSynced));
   if (!hasCases && !(await getOutboxJobs(session)).length) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
@@ -42,14 +42,22 @@ export async function withSyncLock<T>(work: () => Promise<T>): Promise<T | undef
   const previous = localLock; localLock = new Promise<void>(resolve => { release = resolve; });
   await previous;
   const owner = crypto.randomUUID(); let acquired = false;
-  await update<any>('sync:lease', lease => {
-    if (!lease || lease.expires < Date.now()) { acquired = true; return { owner, expires: Date.now() + 90000 }; }
-    return lease;
-  }, store);
-  if (!acquired) { release!(); return; }
-  const heartbeat = setInterval(() => void update<any>('sync:lease', lease => lease?.owner === owner ? { owner, expires: Date.now() + 90000 } : lease, store), 20000);
-  try { return await work(); }
-  finally { clearInterval(heartbeat); await update<any>('sync:lease', lease => lease?.owner === owner ? null : lease, store); release!(); }
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  try {
+    while (!acquired) {
+      await update<any>('sync:lease', lease => {
+        if (!lease || lease.expires < Date.now()) { acquired = true; return { owner, expires: Date.now() + 90000 }; }
+        return lease;
+      }, store);
+      if (!acquired) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    heartbeat = setInterval(() => void update<any>('sync:lease', lease => lease?.owner === owner ? { owner, expires: Date.now() + 90000 } : lease, store).catch(console.warn), 20000);
+    return await work();
+  } finally {
+    clearInterval(heartbeat);
+    try { if (acquired) await update<any>('sync:lease', lease => lease?.owner === owner ? null : lease, store); }
+    finally { release!(); }
+  }
 }
 export async function syncRequest(session: SyncSession, endpoint: string, method = 'GET', body?: any, requestId?: string) {
   if (!(await isSyncSessionCurrent(session))) throw new Error('Session changed. Sign in to synchronize.');
@@ -144,6 +152,7 @@ export async function replayOutbox(session: SyncSession) {
 export async function durableMutation<T>(input: { method: string; endpoint: string; body?: any; localId?: string; collection?: string; optimistic?: T; deletedId?: string; defer?: boolean }): Promise<T & { syncPending?: boolean }> {
   const session = await getSyncSession();
   if (!session) throw new Error('Sign in before saving changes.');
+  const previousRecord = input.collection && (input.optimistic as any)?.id ? (await getLocalRecords(input.collection, session)).find(item => item.id === (input.optimistic as any).id) : undefined;
   const job: OutboxJob = { ...input, body: await serializeMedia(input.body), id: crypto.randomUUID(), userId: session.userId, apiUrl: session.apiUrl, createdAt: Date.now() };
   await update<number>('sync:sequence', previous => { job.createdAt = Math.max(job.createdAt, (previous || 0) + 1); return job.createdAt; }, store);
   await set(`${jobPrefix}${job.id}`, job, store);
@@ -163,7 +172,12 @@ export async function durableMutation<T>(input: { method: string; endpoint: stri
     try { return { value: await runJob(job, session) }; }
     catch (error: any) {
       if (error.statusCode >= 400 && error.statusCode < 500 && ![408, 429].includes(error.statusCode)) {
-        await del(`${jobPrefix}${job.id}`, store); emitChange(); throw error;
+        await del(`${jobPrefix}${job.id}`, store);
+        if (input.collection && (input.optimistic as any)?.id) await update<any[]>(recordsKey(session, input.collection), records => {
+          const retained = (records || []).filter(item => item.id !== (input.optimistic as any).id);
+          if (previousRecord) retained.push(previousRecord); return retained;
+        }, store);
+        emitChange(); throw error;
       }
       job.error = error.message; await set(`${jobPrefix}${job.id}`, job, store);
       return { value: { ...input.optimistic, syncPending: true } };

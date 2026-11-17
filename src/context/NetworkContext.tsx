@@ -1,3 +1,4 @@
+import { getOutboxJobs } from '../../web/outbox';
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { syncManager, SyncStatus } from '../services/syncManager';
 import { ENV, setApiBaseUrl } from '../config/env';
@@ -29,7 +30,13 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubscribe = syncManager.subscribe(status => {
       setSyncStatus(status);
     });
-    const unsubscribeStorage = offlineStorage.subscribe(() => setSyncStatus(previous => ({ ...previous, pendingCount: offlineStorage.getPendingUploads().length })));
+    const refreshPending = async () => {
+      const count = apiClient.getToken() ? offlineStorage.getPendingUploads().length + (await getOutboxJobs()).length : 0;
+      setSyncStatus(previous => ({ ...previous, pendingCount: count }));
+    };
+    const unsubscribeStorage = offlineStorage.subscribe(() => void refreshPending());
+    window.addEventListener('outbox-change', refreshPending);
+    void refreshPending();
     const online = () => { void checkConnectivity(); };
     const offline = () => setIsOnline(false);
     window.addEventListener('online', online);
@@ -43,6 +50,7 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       unsubscribe();
       unsubscribeStorage();
+      window.removeEventListener('outbox-change', refreshPending);
       window.removeEventListener('online', online);
       window.removeEventListener('offline', offline);
       clearInterval(interval);

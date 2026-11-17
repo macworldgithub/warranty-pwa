@@ -1,5 +1,7 @@
 # Mobile application / PWA feature parity audit
 
+> Superseded status: this is the original audit. The two reproduced defects and implementation gaps have since been addressed; see [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md) and [VERIFICATION.md](VERIFICATION.md) for current status. Firebase activation was explicitly deferred by the user.
+
 Audited 17 November 2026 against the mobile source in `../warranty-app`.
 
 **Verdict: No. The PWA contains the mobile application's screens and API call paths, but it is not yet a fully verified, functionally equivalent clone. Two functional defects were reproduced, web push is not configured, some behavior differs intentionally, and live backend/device workflows remain unverified.**
