@@ -23,6 +23,7 @@ import { VoiceToTechButton } from '../voice/VoiceToTechButton';
 import { cameraService } from '../../services/cameraService';
 import { getBaseServerUrl } from '../../config/env';
 import { recognizeEvidence } from '../../../web/ocr';
+import { getEvidenceFileUri } from '../../utils/evidence';
 
 interface EvidenceCardProps {
   rule: BrandPackRule;
@@ -52,11 +53,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   const { width } = useWindowDimensions();
   const isCompactLayout = width < 360;
 
-  const rawImageUri =
-    evidence?.fileUri ||
-    evidence?.storageUrl ||
-    evidence?.serverUrl ||
-    evidence?.thumbnailUrl;
+  const evidenceFileUri = getEvidenceFileUri(evidence);
+  const rawImageUri = evidenceFileUri || evidence?.thumbnailUrl;
 
   const imageUri = rawImageUri
     ? rawImageUri.startsWith('http://') ||
@@ -70,7 +68,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         : rawImageUri
     : null;
 
-  const isCaptured = !!evidence && !!rawImageUri;
+  const isCaptured = Boolean(evidenceFileUri);
   const isVideo =
     rule.mediaType === 'video' ||
     (rule as any).evidenceType === 'video' ||
@@ -106,7 +104,6 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         res = await cameraService.capturePhoto(rule.ruleKey);
       }
 
-      setIsCapturing(false);
       if (!res.success && res.error && !/cancel/i.test(res.error)) Alert.alert('Capture Failed', res.error);
 
       if (res.success && res.fileUri) {
@@ -124,8 +121,9 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         });
       }
     } catch (err) {
-      setIsCapturing(false);
       console.warn('Capture error in EvidenceCard:', err);
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -159,7 +157,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
 
         <View style={styles.headerRight}>
           <Badge
-            label={isCaptured ? 'Captured ✓' : 'Optional'}
+            label={isCaptured ? 'Captured ✓' : rule.isMandatory ? 'Required' : 'Optional'}
             variant={isCaptured ? 'success' : 'neutral'}
             size="sm"
           />

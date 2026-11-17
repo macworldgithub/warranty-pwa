@@ -14,6 +14,7 @@ import { offlineStorage, VehicleZoneInspection } from '../../services/offlineSto
 import { namingEngine } from '../../services/namingEngine';
 import { evidenceUploadService } from '../../services/evidenceUpload.service';
 import { colors } from '../../theme/colors';
+import { getEvidenceFileUri } from '../../utils/evidence';
 
 interface Props {
   vehicle?: RooftopVehicle | null;
@@ -98,6 +99,8 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
   };
   const saveEvidence = (item: Partial<EvidenceItem> & { ruleKey: string }) => {
     if (!inspection || !pack || !vehicle) return;
+    const latest = offlineStorage.getVehicleInspection(inspection.vin);
+    if (!latest || latest.brandPackId !== pack.id || latest.brandPackVersion !== pack.version) return;
     const rule = pack.rules.find(entry => entry.ruleKey === item.ruleKey);
     if (!rule) return;
     const evidence: EvidenceItem = {
@@ -105,19 +108,20 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
       ruleName: rule.name, mediaType: rule.mediaType, isMandatory: rule.isMandatory,
       tier: rule.tier, oemFileName: namingEngine.generateOemFileName(rule, inspection.roNumber || 'RO'),
     };
-    const next = { ...inspection, evidenceItems: [...inspection.evidenceItems.filter(entry => entry.ruleKey !== rule.ruleKey), evidence], capturedZoneKeys: [...new Set([...inspection.capturedZoneKeys, rule.ruleKey])] };
+    const next = { ...latest, evidenceItems: [...latest.evidenceItems.filter(entry => entry.ruleKey !== rule.ruleKey), evidence], capturedZoneKeys: [...new Set([...latest.capturedZoneKeys, rule.ruleKey])] };
     persist(next);
     void evidenceUploadService.uploadEvidenceToServer({ vin: inspection.vin, roNumber: inspection.roNumber, evidenceItem: evidence, vehicleDetails: vehicle, brandId: pack.brandId, siteId: vehicle.siteId, brandPackId: pack.id, brandPackVersion: pack.version }).then(result => {
       if (!result.success || !result.storageUrl) return;
       const latest = offlineStorage.getVehicleInspection(inspection.vin);
-      if (!latest || latest.brandPackId !== pack.id) return;
+      if (!latest || latest.brandPackId !== pack.id || latest.brandPackVersion !== pack.version) return;
       const updated = { ...latest, evidenceItems: latest.evidenceItems.map(entry => entry.id === evidence.id ? { ...entry, storageUrl: result.storageUrl, isUploaded: true } : entry) };
       offlineStorage.saveVehicleInspection(updated);
       setInspection(current => current?.vin === updated.vin ? updated : current);
     });
   };
-  const hasEvidence = (key: string) => inspection?.evidenceItems.some(item => item.ruleKey === key && Boolean(item.fileUri || item.storageUrl || item.serverUrl));
-  const ready = Boolean(pack?.rules.length && pack.rules.filter(rule => rule.isMandatory).every(rule => hasEvidence(rule.ruleKey)));
+  const evidenceForRule = (key: string) => inspection?.evidenceItems.find(item => item.ruleKey === key);
+  const missingRequiredRules = pack?.rules.filter(rule => rule.isMandatory && !getEvidenceFileUri(evidenceForRule(rule.ruleKey))) ?? [];
+  const ready = Boolean(inspection && pack?.rules.length && missingRequiredRules.length === 0);
 
   return <View style={styles.container}>
     <Header title={vehicle ? 'Manufacturer Evidence Capture' : 'New Inspection'} onBack={onBack} onLogout={onLogout} showBrandLogo={false} />
@@ -142,9 +146,10 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
             </> : <>
               <Text style={styles.description}>{vehicle.make} {vehicle.model} · {vehicle.vin}</Text>
               {pack.rules.length === 0 && <Text>No evidence requirements have been configured for this manufacturer.</Text>}
-              {inspection && pack.rules.map(rule => <EvidenceCard key={`${pack.id}_${rule.ruleKey}`} rule={rule} evidence={inspection.evidenceItems.find(item => item.ruleKey === rule.ruleKey)} roNumber={inspection.roNumber || 'RO'} onSaveEvidence={saveEvidence} onRemoveEvidence={key => persist({ ...inspection, evidenceItems: inspection.evidenceItems.filter(item => item.ruleKey !== key), capturedZoneKeys: inspection.capturedZoneKeys.filter(item => item !== key), status: 'IN_PROGRESS' })} onAddVoiceNote={saveVoiceNote} />)}
+              {inspection && pack.rules.map(rule => <EvidenceCard key={`${pack.id}_${rule.ruleKey}`} rule={rule} evidence={evidenceForRule(rule.ruleKey)} roNumber={inspection.roNumber || 'RO'} onSaveEvidence={saveEvidence} onRemoveEvidence={key => persist({ ...inspection, evidenceItems: inspection.evidenceItems.filter(item => item.ruleKey !== key), capturedZoneKeys: inspection.capturedZoneKeys.filter(item => item !== key), status: 'IN_PROGRESS' })} onAddVoiceNote={saveVoiceNote} />)}
               {inspection?.voiceNotes?.map(note => <Text key={note.id} style={styles.card}>{note.transcript}</Text>)}
-              <Button title="Complete & Save Inspection" disabled={!ready || !inspection} onPress={() => { if (inspection) { persist({ ...inspection, status: 'COMPLETE' }); onCompleteInspection?.(vehicle); } }} />
+              {inspection && missingRequiredRules.length > 0 && <Text style={styles.description} accessibilityLiveRegion="polite">Required evidence still missing: {missingRequiredRules.map(rule => rule.name).join(', ')}</Text>}
+              <Button title="Complete & Save Inspection" disabled={!ready} onPress={() => { if (ready && inspection) { persist({ ...inspection, status: 'COMPLETE' }); onCompleteInspection?.(vehicle); } }} />
             </>}
           </>}
         </>}
