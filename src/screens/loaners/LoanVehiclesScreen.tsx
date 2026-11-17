@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import { sitesApi } from '../../api/sites.api';
 import { offlineStorage } from '../../services/offlineStorage';
 import { Key, Home, Car, Plus, LogOut, Wrench } from 'lucide-react-native';
 import { BottomNavBar } from '../../components/common/BottomNavBar';
+import { AssignedRooftopsCard } from '../../components/common/AssignedRooftopsCard';
 import { ReturnLoanerModal } from './ReturnLoanerModal';
 import { IssueLoanerWizardScreen } from './IssueLoanerWizardScreen';
 import { LoanAgreementPdfModal } from './LoanAgreementPdfModal';
@@ -106,7 +107,8 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
   const isNetworkAdmin = user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER';
   const assignedSiteIds = user?.authorizedSiteIds?.length ? user.authorizedSiteIds : [];
   const technicianSiteId = isNetworkAdmin ? 'all' : activeSiteId || user?.defaultSiteId || assignedSiteIds[0] || '';
-  const [siteOptions, setSiteOptions] = useState<Site[]>([]);
+  const [siteDirectory, setSiteDirectory] = useState<Site[] | null>();
+  const siteOptions = useMemo(() => siteDirectory ?? [], [siteDirectory]);
   const siteById = useCallback((siteId?: string) => siteOptions.find((site) => site.id === siteId), [siteOptions]);
   const siteLabel = useCallback((site?: Site) => {
     if (!site) return 'Assigned rooftop';
@@ -121,11 +123,11 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
     sitesApi.getSites()
       .then((sites) => {
         if (!mounted) return;
-        setSiteOptions((sites || []).filter((site) => site.isActive !== false));
+        setSiteDirectory((sites || []).filter((site) => site.isActive !== false));
       })
       .catch((err) => {
         console.warn('[LoanVehiclesScreen] Failed to load rooftops:', err?.message || err);
-        if (mounted) setSiteOptions([]);
+        if (mounted) setSiteDirectory(null);
       });
     return () => {
       mounted = false;
@@ -317,9 +319,7 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
   const todayCount = scopedAgreements.filter((ag) => ag.createdAt && new Date(ag.createdAt).toDateString() === todayDateStr).length;
   const totalCount = scopedAgreements.length;
 
-  const currentSiteName = isClerk || isTechnician
-    ? (technicianSiteObj?.name || technicianSiteId)
-    : (selectedSiteId === 'all' ? 'All Rooftops & Dealerships' : (siteById(selectedSiteId)?.name || selectedSiteId));
+  const currentSiteName = selectedSiteId === 'all' ? 'All Rooftops & Dealerships' : (siteById(selectedSiteId)?.name || selectedSiteId);
 
   // If Wizard open, render it full screen
   if (isWizardOpen) {
@@ -393,23 +393,25 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
         showsVerticalScrollIndicator={false}
       >
         {/* ── ASSIGNED ROOFTOP CARD ──────────────────────────── */}
-        <View style={styles.rooftopCard}>
-          <View style={styles.rooftopCardLeft}>
-            <View style={styles.rooftopIconBox}>
-              <Icon name="home" size={18} color={colors.primary} />
+        {isNetworkAdmin ? (
+          <View style={styles.rooftopCard}>
+            <View style={styles.rooftopCardLeft}>
+              <View style={styles.rooftopIconBox}>
+                <Icon name="home" size={18} color={colors.primary} />
+              </View>
+              <View style={styles.rooftopCardText}>
+                <Text style={styles.rooftopCardLabel}>ADMIN NETWORK VIEW</Text>
+                <Text style={styles.rooftopCardName} numberOfLines={1}>{currentSiteName}</Text>
+              </View>
             </View>
-            <View style={styles.rooftopCardText}>
-              <Text style={styles.rooftopCardLabel}>
-                {isNetworkAdmin ? 'ADMIN NETWORK VIEW' : 'YOUR ASSIGNED ROOFTOP'}
-              </Text>
-              <Text style={styles.rooftopCardName} numberOfLines={1}>{currentSiteName}</Text>
+            <View style={styles.assignedBadge}>
+              <Icon name="lock" size={12} color={colors.textSecondary} />
+              <Text style={styles.assignedBadgeText}>All Sites</Text>
             </View>
           </View>
-          <View style={styles.assignedBadge}>
-            <Icon name="lock" size={12} color={colors.textSecondary} />
-            <Text style={styles.assignedBadgeText}>{isNetworkAdmin ? 'All Sites' : 'Assigned'}</Text>
-          </View>
-        </View>
+        ) : (
+          <AssignedRooftopsCard sites={siteDirectory} currentSiteId={technicianSiteId} testID="loaners-assigned-rooftops" />
+        )}
 
         {isNetworkAdmin && (
           <View style={styles.siteFilterBlock}>

@@ -51,6 +51,7 @@ import {
 import { useGeofence } from '../../context/GeofenceContext';
 import { RoadTestRouteMap, MiniRoutePreview } from '../../components/roadtest/RoadTestRouteMap';
 import { Header } from '../../components/common/Header';
+import { AssignedRooftopsCard } from '../../components/common/AssignedRooftopsCard';
 import { NotificationModal } from '../../components/notifications/NotificationModal';
 import { BottomNavBar } from '../../components/common/BottomNavBar';
 import { notificationsService } from '../../services/notifications.service';
@@ -122,7 +123,6 @@ export function RoadTestScreen({
   const {
     presenceStatus,
     insideGeofence,
-    siteName,
     radiusMeters,
     liveCoords,
     customWorkshop,
@@ -136,7 +136,8 @@ export function RoadTestScreen({
   const [selectedTripDetail, setSelectedTripDetail] = useState<RoadTestTripRecord | null>(null);
   const [showNotifModal, setShowNotifModal] = useState<boolean>(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
-  const [siteOptions, setSiteOptions] = useState<Site[]>([]);
+  const [siteDirectory, setSiteDirectory] = useState<Site[] | null>();
+  const siteOptions = siteDirectory ?? [];
   const [selectedAdminSiteId, setSelectedAdminSiteId] = useState<string>('all');
   const [workshopVehicles, setWorkshopVehicles] = useState<RoadTestVehicle[]>(
     isClerk ? [] : INITIAL_DEMO_VEHICLES
@@ -175,7 +176,7 @@ export function RoadTestScreen({
     ? selectedAdminSiteId === 'all'
       ? 'All Rooftops & Dealerships'
       : selectedAdminSite?.name || selectedAdminSiteId
-    : siteName || 'Assigned Rooftop';
+    : siteOptions.find((site) => site.id === technicianSiteId)?.name || technicianSiteId || 'Unassigned';
   const visibleTripRecords = useMemo(
     () =>
       isNetworkAdmin && selectedAdminSiteId !== 'all'
@@ -185,21 +186,20 @@ export function RoadTestScreen({
   );
 
   useEffect(() => {
-    if (!isNetworkAdmin) return;
     let mounted = true;
     sitesApi.getSites()
       .then((sites) => {
         if (!mounted) return;
-        setSiteOptions((sites || []).filter((site) => site.isActive !== false));
+        setSiteDirectory((sites || []).filter((site) => site.isActive !== false));
       })
       .catch((err) => {
-        console.warn('Failed to load drive rooftop filters', err);
-        setSiteOptions([]);
+        console.warn('Failed to load drive rooftops', err);
+        if (mounted) setSiteDirectory(null);
       });
     return () => {
       mounted = false;
     };
-  }, [isNetworkAdmin]);
+  }, []);
 
   // Pulse animation for live tracking badge
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -265,7 +265,7 @@ export function RoadTestScreen({
             vin: f.vin || 'LGXCE43C8P0192831',
             concern: f.concern || 'Internal test drive',
             siteId: f.siteId || technicianSiteId,
-            siteName: f.siteName || siteName || 'Booran Workshop',
+            siteName: f.siteName || 'Booran Workshop',
           }));
           const demoVehicles = scopedSiteId
             ? INITIAL_DEMO_VEHICLES.filter((v) => v.siteId === scopedSiteId)
@@ -282,14 +282,15 @@ export function RoadTestScreen({
         }
       })
       .catch(() => {});
-  }, [effectiveSiteId, isClerk, technicianSiteId, siteName]);
+  }, [effectiveSiteId, isClerk, technicianSiteId]);
 
   // Handle Starting the Drive
   const handleStartDrive = async () => {
     Keyboard.dismiss();
     const cleanRego = regoInput.trim().toUpperCase() || '1BY-9EV';
     const found = workshopVehicles.find(
-      (v) => v.registration.toUpperCase() === cleanRego || v.repairOrder.toUpperCase() === cleanRego
+      (v) => (effectiveSiteId === 'all' || v.siteId === effectiveSiteId) &&
+        (v.registration.toUpperCase() === cleanRego || v.repairOrder.toUpperCase() === cleanRego)
     );
 
     const vehicleToDrive: RoadTestVehicle = found || {
@@ -319,8 +320,9 @@ export function RoadTestScreen({
     }
 
     setPresenceActivity('ROAD_TEST', vehicleToDrive.repairOrder);
-    setVehicle(vehicleToDrive);
-    startLiveDrive(vehicleToDrive);
+    const driveVehicle = effectiveSiteId === 'all' ? vehicleToDrive : { ...vehicleToDrive, siteName: currentDriveSiteName };
+    setVehicle(driveVehicle);
+    startLiveDrive(driveVehicle);
   };
 
   // Handle Starting a Simulated Drive for instant demonstration
@@ -578,24 +580,23 @@ export function RoadTestScreen({
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 110 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Card A: YOUR ASSIGNED ROOFTOP */}
-        <View style={styles.rooftopCard}>
-          <View style={styles.rooftopIconWrap}>
-            <Building2 size={20} color="#DC2626" />
+        {isNetworkAdmin ? (
+          <View style={styles.rooftopCard}>
+            <View style={styles.rooftopIconWrap}>
+              <Building2 size={20} color="#DC2626" />
+            </View>
+            <View style={styles.rooftopTextWrap}>
+              <Text style={styles.rooftopKicker}>ADMIN NETWORK VIEW</Text>
+              <Text style={styles.rooftopName} numberOfLines={1}>{currentDriveSiteName}</Text>
+            </View>
+            <View style={styles.assignedBadge}>
+              <Lock size={12} color="#64748B" />
+              <Text style={styles.assignedBadgeText}>All Sites</Text>
+            </View>
           </View>
-          <View style={styles.rooftopTextWrap}>
-            <Text style={styles.rooftopKicker}>
-              {isNetworkAdmin ? 'ADMIN NETWORK VIEW' : 'YOUR ASSIGNED ROOFTOP'}
-            </Text>
-            <Text style={styles.rooftopName} numberOfLines={1}>
-              {currentDriveSiteName}
-            </Text>
-          </View>
-          <View style={styles.assignedBadge}>
-            <Lock size={12} color="#64748B" />
-            <Text style={styles.assignedBadgeText}>{isNetworkAdmin ? 'All Sites' : 'Assigned'}</Text>
-          </View>
-        </View>
+        ) : (
+          <AssignedRooftopsCard sites={siteDirectory} currentSiteId={technicianSiteId} testID="road-test-assigned-rooftops" />
+        )}
 
         {isNetworkAdmin && (
           <View style={styles.siteFilterBlock}>

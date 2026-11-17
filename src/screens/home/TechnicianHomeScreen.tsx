@@ -13,7 +13,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import {
-  Building2,
   ShieldCheck,
   Key,
   Bell,
@@ -38,9 +37,9 @@ import { hoistApi } from '../../api/hoist.api';
 import { sitesApi } from '../../api/sites.api';
 import { roadTestService } from '../../services/roadtest.service';
 import { rooftopVehiclesService } from '../../services/rooftopVehicles.service';
-import { assignedWarrantySiteIds } from '../../services/warrantyRooftops';
 import { notificationsService, AppNotificationPayload } from '../../services/notifications.service';
 import { NotificationModal } from '../../components/notifications/NotificationModal';
+import { AssignedRooftopsCard } from '../../components/common/AssignedRooftopsCard';
 import { BottomNavBar } from '../../components/common/BottomNavBar';
 import { LogoutDialog } from '../../components/common/LogoutDialog';
 import { WarrantyCase, LoanAgreement, Site } from '../../types';
@@ -274,8 +273,6 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
   const [agreements, setAgreements] = useState<LoanAgreement[]>([]);
   const [hoistSummary, setHoistSummary] = useState<any>(null);
   const [sites, setSites] = useState<Site[] | null>();
-  const assignedSiteIds = assignedWarrantySiteIds(user);
-  const assignedRooftops = sites?.filter((site) => site.isActive !== false && assignedSiteIds.includes(site.id)) ?? [];
 
   const loadRooftops = useCallback(async () => {
     try {
@@ -561,29 +558,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.rooftopCard} testID="home-assigned-rooftops">
-          <View style={styles.rooftopIconCircle}>
-            <Building2 size={20} color="#DC2626" />
-          </View>
-          <View style={styles.rooftopTextCol}>
-            <Text style={styles.rooftopEyebrow}>YOUR ASSIGNED ROOFTOPS</Text>
-            {assignedRooftops.map((site) => (
-              <View key={site.id} style={styles.rooftopRow}>
-                <Text style={styles.rooftopName}>{site.name}</Text>
-                {site.id === activeSiteId && (
-                  <View style={styles.assignedBadge}>
-                    <Text style={styles.assignedBadgeText}>Current</Text>
-                  </View>
-                )}
-              </View>
-            ))}
-            {assignedRooftops.length === 0 && (
-              <Text style={styles.rooftopStatus}>
-                {sites === undefined ? 'Loading rooftops…' : sites === null ? 'Could not load assigned rooftops.' : 'No active rooftops assigned.'}
-              </Text>
-            )}
-          </View>
-        </View>
+        <AssignedRooftopsCard sites={sites} currentSiteId={activeSiteId} testID="home-assigned-rooftops" />
 
         {/* Card 2: Greeting & Subtitle */}
         <View style={styles.greetingCard}>
@@ -902,73 +877,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 24,
-  },
-
-  // ── ROOFTOP CARD ─────────────────────────────────────────────────────
-  rooftopCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  rooftopIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#FEE2E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rooftopTextCol: {
-    flex: 1,
-    gap: 4,
-  },
-  rooftopEyebrow: {
-    color: '#DC2626',
-    fontSize: 10.5,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-  },
-  rooftopName: {
-    flex: 1,
-    color: '#0F172A',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  rooftopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rooftopStatus: {
-    color: '#475569',
-    fontSize: 13,
-  },
-  assignedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  assignedBadgeText: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '600',
   },
 
   // ── GREETING CARD ────────────────────────────────────────────────────

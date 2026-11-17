@@ -46,6 +46,21 @@ for (const menu of ['Vehicle Inspection', 'Internal Test Drive', 'Warranty Captu
     expect(errors).toEqual([]); expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   });
 }
+test('Drive and Loaners show the technician’s assigned rooftops from Home', async ({ page }) => {
+  const dandenong = { ...site, id: 'site_dandenong_2027', name: 'Dandenong' };
+  const bayside = { ...site, id: 'site_bayside_skoda', name: 'Bayside Skoda' };
+  const profile = { ...user, defaultSiteId: dandenong.id, authorizedSiteIds: [dandenong.id, bayside.id] };
+  await signedIn(page, profile, [site, bayside, dandenong]);
+
+  for (const [menu, testId] of [['Internal Test Drive', 'road-test-assigned-rooftops'], ['Loaners', 'loaners-assigned-rooftops']]) {
+    await page.getByText(menu, { exact: true }).click();
+    const card = page.getByTestId(testId);
+    await expect(card.getByText(bayside.name, { exact: true })).toBeVisible();
+    await expect(card.getByText(dandenong.name, { exact: true }).locator('..').getByText('Current')).toBeVisible();
+    await expect(card.getByText(site.name, { exact: true })).toHaveCount(0);
+    await page.getByText('Home', { exact: true }).last().click();
+  }
+});
 test('desktop uses the same working screens without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 }); await signedIn(page);
   await expect.poll(() => page.getByRole('img', { name: 'Booran Motors', exact: true }).evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
