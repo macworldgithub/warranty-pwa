@@ -41,7 +41,6 @@ import {
   AppNotificationPayload,
 } from '../../services/notifications.service';
 import { useAuth } from '../../context/AuthContext';
-import { useCaseWizard } from '../../context/CaseWizardContext';
 import { casesApi } from '../../api/cases.api';
 import { sitesApi } from '../../api/sites.api';
 import { offlineStorage } from '../../services/offlineStorage';
@@ -81,7 +80,6 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { user, activeSiteId } = useAuth();
-  const { startNewCase } = useCaseWizard();
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER';
   const isClerk = user?.role === 'CLERK';
@@ -312,19 +310,11 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
       return;
     }
     const zoneInspection = offlineStorage.getVehicleInspection(item.vin);
-    startNewCase({
-      currentStep: 3,
-      vin: item.vin,
-      make: item.make,
-      model: item.model,
-      year: item.year,
-      powertrain: item.powertrain,
-      odometer: item.odometer,
-      roNumber: item.inspectionNumber || item.roNumber || '180001',
-      evidenceItems: zoneInspection?.evidenceItems || item.latestCase?.evidenceItems || [],
-    });
     onStartNewCase({
-      currentStep: 3,
+      siteId: item.siteId,
+      siteName: item.siteName,
+      brandId: item.latestCase?.brandId || '',
+      brandName: item.latestCase?.brandName || '',
       vin: item.vin,
       rego: item.rego,
       make: item.make,
@@ -333,6 +323,7 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
       powertrain: item.powertrain,
       odometer: item.odometer,
       roNumber: item.inspectionNumber || item.roNumber || '180001',
+      evidenceItems: zoneInspection?.evidenceItems || item.latestCase?.evidenceItems || [],
     });
   };
 

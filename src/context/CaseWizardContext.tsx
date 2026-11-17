@@ -15,9 +15,11 @@ import {
 import { brandPacksApi } from '../api/brandPacks.api';
 import { vehicleApi } from '../api/vehicle.api';
 import { casesApi } from '../api/cases.api';
+import { sitesApi } from '../api/sites.api';
 import { qualityGates } from '../services/qualityGates';
 import { namingEngine } from '../services/namingEngine';
 import { offlineStorage } from '../services/offlineStorage';
+import { assignedWarrantySiteIds } from '../services/warrantyRooftops';
 import { useAuth } from './AuthContext';
 import { ENV } from '../config/env';
 
@@ -29,6 +31,7 @@ interface CaseWizardState {
   // Step 0 - Start Ticket
   siteId: string;
   siteName: string;
+  isSiteLocked: boolean;
   brandId: string;
   brandName: string;
   roNumber: string;
@@ -123,8 +126,9 @@ const defaultState: CaseWizardState = {
   currentStep: 0,
   caseId: null,
   localDraftId: null,
-  siteId: 'site_cranbourne_byd',
-  siteName: 'Booran BYD Cranbourne',
+  siteId: '',
+  siteName: '',
+  isSiteLocked: false,
   brandId: 'brand_byd',
   brandName: 'BYD',
   roNumber: '',
@@ -226,13 +230,13 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [state.resolvedRules, state.evidenceItems]);
 
   // Step 0 Setters
-  const setSite = (site: Site) => {
+  const setSite = useCallback((site: Site) => {
     setState(prev => ({
       ...prev,
       siteId: site.id,
       siteName: site.name,
     }));
-  };
+  }, []);
 
   const setBrand = async (brand: Brand) => {
     const brandId = brand.id || (brand as any).brandId || 'brand_byd';
@@ -531,6 +535,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       localDraftId: caseItem.id,
       siteId: caseItem.siteId,
       siteName: caseItem.siteName || '',
+      isSiteLocked: Boolean(caseItem.submission) || !['Draft', 'Uploading'].includes(caseItem.status),
       brandId: caseItem.brandId,
       brandName: caseItem.brandName || '',
       roNumber: caseItem.roNumber,
@@ -627,10 +632,21 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     const evidenceItems = state.evidenceItems.map(item => ({ ...item }));
     await saveSubmissionDraft(submission, evidenceItems);
+    if (!submission && !state.isSiteLocked) {
+      const siteError = 'Tap Edit on Vehicle & Ticket Summary and select the assigned rooftop for this repair order. If it is missing, ask your administrator to check your rooftop assignment.';
+      if (!assignedWarrantySiteIds(user).includes(state.siteId)) throw new Error(siteError);
+
+      // The API client can use the cached directory when the device is offline.
+      const sites = await sitesApi.getSites().catch(() => undefined);
+      requireSession();
+      if (Array.isArray(sites) && !sites.some(site => site.id === state.siteId && site.isActive !== false)) {
+        throw new Error(siteError);
+      }
+    }
     // Generate DTO with solid defaults matching backend DTO schema
     const dto = {
-      siteId: state.siteId || 'site_cranbourne_byd',
-      siteName: state.siteName || 'Booran BYD Cranbourne',
+      siteId: state.siteId,
+      siteName: state.siteName,
       brandId: state.brandId || 'brand_byd',
       brandName: state.brandName || 'BYD',
       brandPackId: state.activeBrandPack?.id || 'brandpack_byd_v1',

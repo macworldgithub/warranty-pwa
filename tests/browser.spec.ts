@@ -5,13 +5,13 @@ const user = { id: 'test-tech', name: 'Test Technician', email: 'test@example.co
 const site = { id: 'site_cranbourne_byd', name: 'Booran BYD Cranbourne', code: 'CRN_BYD', isActive: true, authorizedBrands: ['brand_byd'] };
 const rule = { id: 'rule-front', ruleKey: 'front_vehicle_photo', name: 'Front of Vehicle', description: 'Capture the front of the vehicle', mediaType: 'image', tier: 1, isMandatory: true, namingConvention: '{RO}Front.jpg' };
 const pack = { id: 'brandpack_byd_v1', brandId: 'brand_byd', brandName: 'BYD', version: 1, status: 'PUBLISHED', name: 'BYD Standard Pack', rules: [rule] };
-async function fixtures(page: Page) {
+async function fixtures(page: Page, profile = user, rooftops = [site]) {
   await page.route('**/api/v1/**', async route => {
     const url = new URL(route.request().url()), path = url.pathname.replace('/api/v1', '');
     let data: any = [];
-    if (path === '/auth/login') data = { token: 'fixture-token', user };
-    else if (path === '/auth/me') data = user;
-    else if (path === '/sites') data = [site];
+    if (path === '/auth/login') data = { token: 'fixture-token', user: profile };
+    else if (path === '/auth/me') data = profile;
+    else if (path === '/sites') data = rooftops;
     else if (path.endsWith('/brands') && path.startsWith('/sites/')) data = { authorizedBrandIds: ['brand_byd'] };
     else if (path === '/brands') data = [{ id: 'brand_byd', name: 'BYD' }];
     else if (path === '/brand-packs/evaluate-rules') data = { brandPackId: pack.id, brandPackVersion: 1, packName: pack.name, resolvedRules: pack.rules, mandatoryCount: 1, optionalCount: 0 };
@@ -23,9 +23,9 @@ async function fixtures(page: Page) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(data) });
   });
 }
-async function signedIn(page: Page) {
-  await fixtures(page);
-  await page.addInitScript(({ user }) => { sessionStorage.setItem('booran-user', JSON.stringify(user)); sessionStorage.setItem('booran-token', 'fixture-token'); }, { user });
+async function signedIn(page: Page, profile = user, rooftops = [site]) {
+  await fixtures(page, profile, rooftops);
+  await page.addInitScript(profile => { sessionStorage.setItem('booran-user', JSON.stringify(profile)); sessionStorage.setItem('booran-token', 'fixture-token'); }, profile);
   await page.goto('/'); await expect(page.getByText('APP MENU', { exact: true })).toBeVisible();
 }
 test('mobile login matches the app and sign-in navigates to the technician home', async ({ page }) => {
@@ -130,11 +130,13 @@ test('production app has valid install metadata and correctly sized branded icon
   } finally { await context.close(); }
 });
 test('all seven warranty wizard steps accept real case data and submit the pack', async ({ page }) => {
-  await signedIn(page);
+  const assigned = { ...site, id: 'site_dandenong_2027', name: 'Dandenong' };
+  await signedIn(page, { ...user, authorizedSiteIds: [assigned.id] }, [site, assigned]);
   let saved: any, submitted = false;
   await page.route('**/api/v1/warranty-cases**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() === 'POST' && path.endsWith('/warranty-cases')) {
+      expect(route.request().postDataJSON()).toMatchObject({ siteId: assigned.id, siteName: assigned.name });
       saved = { ...route.request().postDataJSON(), id: 'case-browser-1', status: 'Draft', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), flagHistory: [] };
       await route.fulfill({ json: saved });
     } else if (path.endsWith('/submit-from-workshop')) { submitted = true; await route.fulfill({ json: { ...saved, status: 'Awaiting Review' } }); }

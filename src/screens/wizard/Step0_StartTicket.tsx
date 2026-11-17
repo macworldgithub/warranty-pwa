@@ -19,6 +19,7 @@ import { useCaseWizard } from '../../context/CaseWizardContext';
 import { useAuth } from '../../context/AuthContext';
 import { sitesApi } from '../../api/sites.api';
 import { brandsApi } from '../../api/brands.api';
+import { availableWarrantySites, preferredWarrantySite } from '../../services/warrantyRooftops';
 import { Site, Brand } from '../../types';
 
 interface Step0Props {
@@ -38,12 +39,14 @@ const MOCK_BRANDS: Brand[] = [
 ];
 
 export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) => {
-  const { user } = useAuth();
+  const { user, activeSiteId } = useAuth();
   const {
     siteId,
     siteName,
+    isSiteLocked,
     brandId,
     brandName,
+    make,
     roNumber,
     claimNumber,
     setSite,
@@ -55,118 +58,62 @@ export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) =>
   const [sites, setSites] = useState<Site[]>([]);
   const [allBrands, setAllBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
-  const [brandLoading, setBrandLoading] = useState(false);
-  // authorizedBrandIds for the currently selected site (null = not yet loaded)
-  const [siteAuthorizedIds, setSiteAuthorizedIds] = useState<string[] | null>(null);
-  const isNetworkAdmin = user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER';
+  const [siteLoadError, setSiteLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
-  // Sites filtered only for restricted users. Network admins always see every live rooftop.
   const authorizedSites = useMemo(() => {
-    if (isNetworkAdmin) return sites;
-    const allowed = user?.authorizedSiteIds;
-    if (!allowed || allowed.length === 0) return sites; // admin/no restriction: show all
-    return sites.filter((s) => allowed.includes(s.id));
-  }, [isNetworkAdmin, sites, user?.authorizedSiteIds]);
+    return availableWarrantySites(sites, user);
+  }, [sites, user]);
 
-  // True when there is exactly one allowed rooftop (no picker needed)
-  const singleSiteLocked = authorizedSites.length === 1;
+  const selectedSite = authorizedSites.find(site => site.id === siteId);
 
   /* -- Initial load: all sites + all brands -- */
   useEffect(() => {
+    let current = true;
+    setLoading(true);
+    setSiteLoadError(false);
     const fetchData = async () => {
-      try {
-        const [s, b] = await Promise.all([sitesApi.getSites(), brandsApi.getBrands()]);
-        const siteList = (s || []).filter((site) => site.isActive !== false);
-        const brandList = b || MOCK_BRANDS;
-        setSites(siteList);
-        setAllBrands(brandList);
-
-        // Determine allowed sites for this user
-        const allowed = isNetworkAdmin ? undefined : user?.authorizedSiteIds;
-        const allowedSites =
-          allowed && allowed.length > 0
-            ? siteList.filter((st) => allowed.includes(st.id))
-            : siteList;
-
-        // Auto-select first allowed site if none chosen
-        if (allowedSites.length > 0 && !siteId) {
-          const firstSite = allowedSites[0];
-          setSite(firstSite);
-          const authIds = firstSite.authorizedBrands ?? (firstSite as any).authorizedBrandIds ?? null;
-          setSiteAuthorizedIds(authIds);
-        } else if (siteId) {
-          // Restore authorized IDs for already-selected site
-          const current = siteList.find((s) => s.id === siteId);
-          const authIds = current?.authorizedBrands ?? (current as any)?.authorizedBrandIds ?? null;
-          setSiteAuthorizedIds(authIds);
-        }
-      } catch (err) {
-        console.warn('[Step0_StartTicket] Failed to load backend rooftops:', err);
-        setSites([]);
-        setAllBrands(MOCK_BRANDS);
-        setSiteAuthorizedIds([]);
-      } finally {
-        setLoading(false);
-      }
+      const [siteResult, brandResult] = await Promise.allSettled([sitesApi.getSites(), brandsApi.getBrands()]);
+      if (!current) return;
+      setSites(siteResult.status === 'fulfilled' ? siteResult.value ?? [] : []);
+      setSiteLoadError(siteResult.status === 'rejected');
+      setAllBrands(brandResult.status === 'fulfilled' ? brandResult.value ?? MOCK_BRANDS : MOCK_BRANDS);
+      setLoading(false);
     };
-    fetchData();
-  }, []);
+    void fetchData();
+    return () => { current = false; };
+  }, [loadAttempt]);
 
-  /* -- When user selects a different site, fetch its authorized brands -- */
-  const handleSiteSelect = async (site: Site) => {
-    // Clear brand selection if it won't be valid for the new site
-    setSite(site);
-    setBrandLoading(true);
-    setSiteAuthorizedIds(null); // trigger loading state
-    setBrand({ id: '', name: '' }); // clear previous selection
-
-    try {
-      // Use local data if the site object already carries authorizedBrands
-      const localIds = site.authorizedBrands ?? (site as any).authorizedBrandIds;
-      if (localIds && localIds.length > 0) {
-        setSiteAuthorizedIds(localIds);
-      } else {
-        // Fetch from API endpoint
-        const { authorizedBrandIds } = await sitesApi.getSiteAuthorizedBrands(site.id);
-        setSiteAuthorizedIds(authorizedBrandIds);
-      }
-    } catch {
-      // Fallback: show all brands
-      setSiteAuthorizedIds(null);
-    } finally {
-      setBrandLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (loading || isSiteLocked) return;
+    const site = selectedSite ?? (!siteId ? preferredWarrantySite(authorizedSites, activeSiteId, user?.defaultSiteId) : undefined);
+    if (site && (site.id !== siteId || site.name !== siteName)) setSite(site);
+  }, [loading, isSiteLocked, selectedSite, authorizedSites, siteId, siteName, activeSiteId, user?.defaultSiteId, setSite]);
 
   /* -- Derived: brands that are authorized for the selected site -- */
   const availableBrands = useMemo(() => {
-    if (!siteId) return allBrands;
-    const currentSite = sites.find((s) => s.id === siteId);
-    const authIds = siteAuthorizedIds ?? currentSite?.authorizedBrands ?? (currentSite as any)?.authorizedBrandIds;
+    if (!selectedSite) return [];
+    const authIds = selectedSite.authorizedBrands ?? selectedSite.authorizedBrandIds;
     if (authIds && authIds.length > 0) {
       const filtered = allBrands.filter((b) => authIds.includes(b.id));
       if (filtered.length > 0) return filtered;
     }
     // Fallback: match by brand name in site name
-    if (currentSite) {
-      const siteLower = (currentSite.name || '').toLowerCase();
-      const matched = allBrands.filter((b) => siteLower.includes((b.name || '').toLowerCase()));
-      if (matched.length > 0) return matched;
-    }
+    const siteLower = selectedSite.name.toLowerCase();
+    const matched = allBrands.filter(b => siteLower.includes(b.name.toLowerCase()));
+    if (matched.length > 0) return matched;
     return allBrands;
-  }, [allBrands, siteAuthorizedIds, siteId, sites]);
+  }, [allBrands, selectedSite]);
 
-  // Automatically select the brand if only 1 exists (e.g. BYD for Cranbourne) or if previous brand invalid
   useEffect(() => {
-    if (availableBrands.length > 0) {
-      const isValid = availableBrands.some((b) => b.id === brandId);
-      if (!isValid) {
-        setBrand(availableBrands[0]);
-      }
-    }
-  }, [availableBrands, brandId]);
+    if (isSiteLocked || availableBrands.some(brand => brand.id === brandId)) return;
+    const matchingBrand = availableBrands.find(brand => brand.name.toLowerCase() === make?.toLowerCase());
+    const brand = matchingBrand ?? availableBrands[0];
+    if (brand) void setBrand(brand);
+  }, [availableBrands, brandId, isSiteLocked, make, setBrand]);
 
   const isValidRo = roNumber.trim().length >= 3;
+  const validBrand = availableBrands.some(brand => brand.id === brandId);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -176,24 +123,35 @@ export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) =>
 
       <Card title="Dealership Site">
 
-        {loading ? (
+        {isSiteLocked ? (
+          <Text style={styles.lockedSiteText}>{siteName || siteId}</Text>
+        ) : loading ? (
           <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 12 }} />
-        ) : singleSiteLocked ? (
-          // Single assigned rooftop — show as read-only locked badge
+        ) : siteLoadError ? (
+          <>
+            <Text style={styles.subtext}>Could not load rooftops. Check your connection and try again.</Text>
+            <Button title="Retry" onPress={() => setLoadAttempt(attempt => attempt + 1)} />
+          </>
+        ) : authorizedSites.length === 0 ? (
+          <Text style={styles.subtext}>No active rooftop is assigned to your account. Ask your administrator to check your rooftop assignment.</Text>
+        ) : authorizedSites.length === 1 && selectedSite ? (
           <View style={styles.lockedSiteRow}>
             <Icon name="shield" size={16} color={colors.primary} />
-            <Text style={styles.lockedSiteText}>{authorizedSites[0].name}</Text>
+            <Text style={styles.lockedSiteText}>{selectedSite.name}</Text>
             <Badge label="Your Rooftop" variant="success" size="sm" />
           </View>
         ) : (
           <View style={styles.chipsContainer}>
+            {siteId && !selectedSite && (
+              <Text style={styles.subtext}>This draft's rooftop is unavailable. Select the assigned rooftop for this repair order.</Text>
+            )}
             {authorizedSites.map((s) => {
               const isSelected = s.id === siteId;
               return (
                 <TouchableOpacity
                   key={s.id}
                   activeOpacity={0.75}
-                  onPress={() => handleSiteSelect(s)}
+                  onPress={() => setSite(s)}
                   style={[styles.chip, isSelected && styles.chipSelected]}
                 >
                   <Icon name="shield" size={14} color={isSelected ? colors.primaryLight : colors.textSecondary} />
@@ -207,13 +165,10 @@ export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) =>
 
       {/* Brand Selection - filtered by selected site */}
       <Card title="Vehicle Brand">
-        {!siteId ? (
+        {isSiteLocked && !selectedSite ? (
+          <Text style={styles.subtext}>{brandName}</Text>
+        ) : !selectedSite ? (
           <Text style={styles.subtext}>Select a dealership site above.</Text>
-        ) : brandLoading ? (
-          <View style={styles.brandLoadingRow}>
-            <ActivityIndicator size="small" color={colors.primary} />
-            <Text style={[styles.subtext, { marginLeft: 8 }]}>Loading brands...</Text>
-          </View>
         ) : availableBrands.length === 0 ? (
           <Text style={styles.subtext}>No brands linked to this site.</Text>
         ) : (
@@ -274,7 +229,7 @@ export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) =>
         <Button
           title="Vehicle Info"
           variant="primary"
-          disabled={!isValidRo || !siteId || !brandId}
+          disabled={!isValidRo || (isSiteLocked ? !brandId : loading || !selectedSite || !validBrand)}
           onPress={onNext}
           rightIcon={<Icon name="chevron-right" size={18} color={colors.textInverse} />}
           style={{ flex: 2 }}
@@ -376,11 +331,6 @@ const styles = StyleSheet.create({
   brandChipTextSelected: {
     color: colors.primary,
     fontWeight: typography.weights.bold,
-  },
-  brandLoadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
   },
   actionRow: {
     flexDirection: 'row',
