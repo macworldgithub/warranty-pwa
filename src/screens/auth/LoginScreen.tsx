@@ -59,6 +59,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   // PIN Setup Phase: 1 = Enter PIN, 2 = Set Username, Password & Specific Sites
   const [pinStep, setPinStep] = useState<1 | 2>(1);
   const [verifyingPin, setVerifyingPin] = useState(false);
+  const [pinRetryUntil, setPinRetryUntil] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+
+  useEffect(() => {
+    if (!pinRetryUntil) return;
+    const timer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((pinRetryUntil - Date.now()) / 1000));
+      setSecondsRemaining(remaining);
+      if (!remaining) setPinRetryUntil(0);
+    }, 250);
+    return () => clearInterval(timer);
+  }, [pinRetryUntil]);
+
+  const countdownMessage = secondsRemaining > 0
+    ? 'Too many PIN attempts. Try again in ' + Math.floor(secondsRemaining / 60) + ':' +
+      String(secondsRemaining % 60).padStart(2, '0') + '.'
+    : null;
+
+  const startPinCountdown = (error: unknown) => {
+    const apiError = error as { statusCode?: number; data?: { retryAfterSeconds?: number } } | null;
+    const seconds = apiError?.data?.retryAfterSeconds;
+    if (apiError?.statusCode !== 429 || typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
+      return false;
+    }
+    setSecondsRemaining(Math.ceil(seconds));
+    setPinRetryUntil(Date.now() + seconds * 1000);
+    return true;
+  };
+
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
 
@@ -112,7 +141,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // ── 1. PIN Step 1: Validate Workshop PIN ───────────────────────────
   const handleVerifyPin = async () => {
-    if (verifyingPin) return;
+    if (verifyingPin || secondsRemaining > 0) return;
     setPinError(null);
     setAuthError(null);
     const cleanPin = enteredPin.trim();
@@ -133,6 +162,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       await authApi.verifyWorkshopPin(cleanPin);
       setPinStep(2);
     } catch (error) {
+      if (startPinCountdown(error)) return;
       setPinError(error instanceof Error ? error.message : 'Unable to verify workshop PIN.');
     } finally {
       setVerifyingPin(false);
@@ -141,6 +171,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // ── 2. PIN Step 2: Create Account & Select Specific Sites ───────────
   const handleCompleteSetup = async () => {
+    if (secondsRemaining > 0) return;
     setAuthError(null);
     setSuccessMessage(null);
 
@@ -176,6 +207,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
       onLoginSuccess();
     } catch (err: any) {
+      if (startPinCountdown(err)) return;
       setAuthError(err.message || 'Unable to complete setup. Please check details.');
     }
   };
@@ -319,10 +351,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         </TouchableOpacity>
       </View>
 
-      {(authError || sessionEnded) && (
+      {(authError || sessionEnded || (activeTab === 'PIN_SETUP' && pinStep === 2 && countdownMessage)) && (
         <View style={styles.errorBanner}>
           <Icon name="alert-circle" size={17} color={colors.danger} />
-          <Text style={styles.errorText}>{authError || 'Your session ended. Sign in again and look for your draft in Warranty Capture.'}</Text>
+          <Text style={styles.errorText}>{(activeTab === 'PIN_SETUP' && pinStep === 2 && countdownMessage) || authError || 'Your session ended. Sign in again and look for your draft in Warranty Capture.'}</Text>
         </View>
       )}
 
@@ -369,10 +401,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 />
               </View>
 
-              {pinError && (
+              {(countdownMessage || pinError) && (
                 <View style={styles.pinErrorRow}>
                   <Icon name="alert-circle" size={14} color={colors.danger} />
-                  <Text style={styles.pinErrorText}>{pinError}</Text>
+                  <Text style={styles.pinErrorText}>{countdownMessage || pinError}</Text>
                 </View>
               )}
 
@@ -381,7 +413,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 variant="primary"
                 size="lg"
                 onPress={handleVerifyPin}
-                disabled={verifyingPin}
+                disabled={verifyingPin || secondsRemaining > 0}
                 rightIcon={<Icon name="chevron-right" size={18} color={colors.textInverse} />}
                 fullWidth
                 style={styles.actionButton}
@@ -473,6 +505,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
               size="lg"
               loading={isLoading}
               onPress={handleCompleteSetup}
+              disabled={secondsRemaining > 0}
               fullWidth
               style={styles.actionButton}
             />
