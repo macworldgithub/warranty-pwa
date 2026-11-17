@@ -10,6 +10,7 @@ async function setup(page: Page, role = 'TECHNICIAN') {
     if (endpoint.endsWith('/pdf')) { state.pdfAuthorized = request.headers().authorization === 'Bearer workflow-token'; await route.fulfill({ contentType: 'application/pdf', body: '%PDF-1.4\n%%EOF' }); return; }
     if (endpoint === '/auth/me') result = user;
     else if (endpoint === '/sites') result = [site];
+    else if (endpoint === `/sites/${site.id}`) result = site;
     else if (endpoint === '/brands') result = [{ id: 'brand_byd', name: 'BYD' }];
     else if (endpoint === '/auth/users') {
       if (method === 'POST') { result = { ...body, id: 'created-user', defaultSiteId: body.siteId }; state.users.push(result); } else result = state.users;
@@ -57,6 +58,14 @@ for (const action of ['approve', 'flag']) test('reviewer can ' + action + ' a wa
     await page.getByText('Reject with Comments', { exact: true }).click(); await page.getByPlaceholder('E.g., The VIN compliance plate photo is blurry. Please wipe the lens, use a torch, and retake.').fill('Please retake the VIN photo.');
     await page.getByText('Confirm Rejection', { exact: true }).click(); await expect(page.getByRole('heading', { name: 'Case Rejected & Flagged', exact: true })).toBeVisible(); expect(state.cases[0].status).toBe('Flagged');
   }
+});
+test('technician case details resolve the saved rooftop ID to its dealership name', async ({ page }) => {
+  const state = await setup(page);
+  Object.assign(state.cases[0], { technicianId: 'workflow-user', siteName: 'Booran Dealership' });
+  await page.getByText('Warranty Capture', { exact: true }).click();
+  await page.getByText('RO-REVIEW', { exact: true }).first().click();
+  await expect(page.getByText('DEALERSHIP ROOFTOP', { exact: true })).toBeVisible();
+  await expect(page.getByText(site.name, { exact: true })).toBeVisible();
 });
 test('technician completes a hoist checklist and server-confirmed sign-off', async ({ page }) => {
   const state = await setup(page); await page.getByText('Hoist Inspections', { exact: true }).click(); await page.getByText('Start Pre-Shift Check', { exact: true }).first().click();

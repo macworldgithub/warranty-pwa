@@ -37,6 +37,7 @@ import { Card } from '../../components/common/Card';
 import { EvidenceItem, WarrantyCase } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { casesApi } from '../../api';
+import { sitesApi } from '../../api/sites.api';
 import { getBaseServerUrl } from '../../config/env';
 import { offlineStorage } from '../../services/offlineStorage';
 import { cameraService } from '../../services/cameraService';
@@ -69,10 +70,24 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
   const { user } = useAuth();
 
   const [currentCase, setCurrentCase] = useState<WarrantyCase>(caseItem);
+  const [caseSite, setCaseSite] = useState<{ id: string; name: string }>();
   const [acceptModalVisible, setAcceptModalVisible] = useState(false);
   const [rejectModalVisible, setRejectModalVisible] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceItem | null>(null);
+
+  const caseSiteId = currentCase.siteId;
+  useEffect(() => {
+    if (!caseSiteId) return;
+    let current = true;
+    void sitesApi.getSiteById(caseSiteId).then((site) => {
+      if (current) setCaseSite(site);
+    }).catch(() => {});
+    return () => { current = false; };
+  }, [caseSiteId]);
+
+  const savedSiteName = currentCase.siteName === 'Booran Dealership' ? undefined : currentCase.siteName;
+  const rooftopName = (caseSite?.id === caseSiteId ? caseSite?.name : undefined) || savedSiteName || caseSiteId || 'Unassigned';
 
   // Helper to resolve full evidence image URI (supporting relative /uploads, file://, http(s)://)
   const getEvidenceUri = (ev?: Partial<EvidenceItem>): string | null => {
@@ -528,6 +543,10 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
             <View style={styles.gridItem}>
               <Text style={styles.fieldLabel}>TECHNICIAN</Text>
               <Text style={styles.fieldValue}>{currentCase.technicianName || 'Jake Smith'}</Text>
+            </View>
+            <View style={styles.gridItemFull}>
+              <Text style={styles.fieldLabel}>DEALERSHIP ROOFTOP</Text>
+              <Text style={styles.fieldValue}>{rooftopName}</Text>
             </View>
           </View>
         </Card>
