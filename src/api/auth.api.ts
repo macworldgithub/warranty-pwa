@@ -9,6 +9,7 @@ import {
 } from '../types';
 
 export interface RegisterTechnicianDto {
+  workshopPin: string;
   name: string;
   email: string;
   password?: string;
@@ -18,6 +19,10 @@ export interface RegisterTechnicianDto {
 }
 
 export const authApi = {
+  verifyWorkshopPin: async (workshopPin: string): Promise<void> => {
+    await apiClient.post('/auth/verify-workshop-pin', { workshopPin });
+  },
+
   login: async (email: string, password?: string): Promise<AuthResponse> => {
     try {
       const response = await apiClient.post<any>('/auth/login', {

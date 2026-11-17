@@ -19,6 +19,7 @@ import { Button } from '../../components/common/Button';
 import { useAuth } from '../../context/AuthContext';
 import { useNetwork } from '../../context/NetworkContext';
 import { ForgotPasswordModal } from '../../components/auth/ForgotPasswordModal';
+import { authApi } from '../../api/auth.api';
 import { sitesApi } from '../../api/sites.api';
 import { Site } from '../../types';
 import { InstallAppButton } from '../../../web/InstallAppButton';
@@ -57,6 +58,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // PIN Setup Phase: 1 = Enter PIN, 2 = Set Username, Password & Specific Sites
   const [pinStep, setPinStep] = useState<1 | 2>(1);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [enteredPin, setEnteredPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
 
@@ -109,7 +111,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   }, []);
 
   // ── 1. PIN Step 1: Validate Workshop PIN ───────────────────────────
-  const handleVerifyPin = () => {
+  const handleVerifyPin = async () => {
+    if (verifyingPin) return;
     setPinError(null);
     setAuthError(null);
     const cleanPin = enteredPin.trim();
@@ -119,14 +122,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
 
-    const isNumeric = /^\d{3,6}$/.test(cleanPin);
+    const isNumeric = /^\d{4}$/.test(cleanPin);
     if (!isNumeric) {
-      setPinError('Workshop PIN must be 3 to 6 digits.');
+      setPinError('Workshop PIN must be exactly 4 digits.');
       return;
     }
 
-    setSuccessMessage(`Workshop PIN verified! Now create your credentials and select your sites.`);
-    setPinStep(2);
+    setVerifyingPin(true);
+    try {
+      await authApi.verifyWorkshopPin(cleanPin);
+      setPinStep(2);
+    } catch (error) {
+      setPinError(error instanceof Error ? error.message : 'Unable to verify workshop PIN.');
+    } finally {
+      setVerifyingPin(false);
+    }
   };
 
   // ── 2. PIN Step 2: Create Account & Select Specific Sites ───────────
@@ -157,6 +167,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
     try {
       await registerTechnician({
+        workshopPin: enteredPin.trim(),
         name: signUpName.trim(),
         email: signUpEmail.trim().toLowerCase(),
         password: signUpPassword,
@@ -348,11 +359,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                     setEnteredPin(val);
                     if (pinError) setPinError(null);
                   }}
-                  placeholder="e.g. 1234"
+                  placeholder="Enter PIN"
                   placeholderTextColor={colors.textMuted}
                   keyboardType="number-pad"
-                  maxLength={6}
-                  secureTextEntry={false}
+                  maxLength={4}
+                  secureTextEntry
+                  editable={!verifyingPin}
                   autoFocus
                 />
               </View>
@@ -364,27 +376,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </View>
               )}
 
-              <View style={styles.quickPinsRow}>
-                <Text style={styles.quickPinsLabel}>Demo / Workshop PINs:</Text>
-                <View style={styles.quickPinsList}>
-                  {['1234', '2026', '8839'].map((p) => (
-                    <TouchableOpacity
-                      key={p}
-                      style={styles.quickPinChip}
-                      onPress={() => setEnteredPin(p)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.quickPinChipText}>{p}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
               <Button
                 title="Verify PIN & Continue"
                 variant="primary"
                 size="lg"
                 onPress={handleVerifyPin}
+                disabled={verifyingPin}
                 rightIcon={<Icon name="chevron-right" size={18} color={colors.textInverse} />}
                 fullWidth
                 style={styles.actionButton}
@@ -404,7 +401,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 activeOpacity={0.7}
               >
                 <Icon name="refresh" size={12} color={colors.textSecondary} />
-                <Text style={styles.changePinText}>Change PIN ({enteredPin})</Text>
+                <Text style={styles.changePinText}>Change PIN</Text>
               </TouchableOpacity>
             </View>
 
@@ -874,36 +871,6 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontWeight: typography.weights.medium,
   },
-  quickPinsRow: {
-    backgroundColor: colors.backgroundSecondary,
-    padding: spacing.sm + 2,
-    borderRadius: spacing.borderRadius.md,
-    gap: 6,
-  },
-  quickPinsLabel: {
-    fontSize: typography.sizes.xs - 1,
-    color: colors.textSecondary,
-    fontWeight: typography.weights.medium,
-  },
-  quickPinsList: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  quickPinChip: {
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-    borderRadius: spacing.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  quickPinChipText: {
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.bold,
-    color: colors.primary,
-  },
-
-  // ── Step 2 Specific Styles ──
   stepIndicatorRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

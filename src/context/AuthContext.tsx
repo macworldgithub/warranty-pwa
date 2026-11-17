@@ -27,6 +27,7 @@ interface AuthContextType {
     password?: string;
     employeeId?: string;
     defaultSiteId?: string;
+    workshopPin: string;
     authorizedSiteIds?: string[];
   }) => Promise<User>;
   sendRegistrationOtp: (email: string, name?: string) => Promise<GenericAuthResponse>;
@@ -140,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     password?: string;
     employeeId?: string;
     defaultSiteId?: string;
+    workshopPin: string;
     authorizedSiteIds?: string[];
   }): Promise<User> => {
     setIsLoading(true);
