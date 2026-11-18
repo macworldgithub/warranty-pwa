@@ -1,3 +1,4 @@
+import { missingVehiclePhotos } from './vehiclePhotos';
 import { PersistentMap, persist } from '../../web/storage';
 import { requestBackgroundSync } from '../../web/outbox';
 import { WarrantyCase, CreateWarrantyCaseDto, EvidenceItem, VoiceNote } from '../types';
@@ -183,6 +184,7 @@ class OfflineStorageService {
 
   // ── Real Vehicle Zone Inspection API ──────────────────────────────────
   public saveVehicleInspection(inspection: VehicleZoneInspection): void {
+    inspection.status = missingVehiclePhotos(inspection.evidenceItems, true).length === 0 ? 'COMPLETE' : 'IN_PROGRESS';
     this.vehicleInspections.set(inspection.vin.toUpperCase(), {
       ...inspection,
       updatedAt: new Date().toISOString(),
@@ -191,7 +193,9 @@ class OfflineStorageService {
   }
 
   public getVehicleInspection(vin: string): VehicleZoneInspection | undefined {
-    return this.vehicleInspections.get(vin.toUpperCase());
+    const inspection = this.vehicleInspections.get(vin.toUpperCase());
+    if (inspection) inspection.status = missingVehiclePhotos(inspection.evidenceItems, true).length === 0 ? 'COMPLETE' : 'IN_PROGRESS';
+    return inspection;
   }
 
   public getAllVehicleInspections(): VehicleZoneInspection[] {
@@ -233,9 +237,7 @@ class OfflineStorageService {
       });
     }
 
-    if (existing.capturedZoneKeys.length >= 10) {
-      existing.status = 'COMPLETE';
-    }
+    existing.status = missingVehiclePhotos(existing.evidenceItems, true).length === 0 ? 'COMPLETE' : 'IN_PROGRESS';
 
     this.saveVehicleInspection(existing);
     return existing;

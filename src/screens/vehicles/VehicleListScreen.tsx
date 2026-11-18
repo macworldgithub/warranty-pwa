@@ -1,3 +1,4 @@
+import { hasVehiclePhoto, missingVehiclePhotos } from '../../services/vehiclePhotos';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
@@ -194,32 +195,14 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
     const zoneInspection = offlineStorage.getVehicleInspection(cleanVin);
     const caseEvidence = veh.latestCase?.evidenceItems || [];
 
-    // All captured ruleKeys for this vehicle
-    const capturedRuleKeys = new Set<string>([
-      ...(zoneInspection?.capturedZoneKeys || []),
-      ...caseEvidence.filter((e) => e.fileUri || e.serverUrl || e.storageUrl).map((e) => e.ruleKey),
-    ]);
-
-    // Check each of the 10 zones from GUIDED_CAPTURE_ZONES
-    const zonesStatus = GUIDED_CAPTURE_ZONES.map((zone, idx) => {
-      const isExplicitlyCaptured = capturedRuleKeys.has(zone.ruleKey);
-      const isInheritedCaptured =
-        (zoneInspection?.status === 'COMPLETE') ||
-        (veh.inspectionStatus === 'COMPLETE') ||
-        (veh.capturedZones !== undefined && idx < veh.capturedZones);
-
-      return {
-        ...zone,
-        isCaptured: isExplicitlyCaptured || isInheritedCaptured,
-      };
-    });
-
-    const capturedCount = zonesStatus.filter((z) => z.isCaptured).length;
-    const missingZones = zonesStatus.filter((z) => !z.isCaptured);
-    const isComplete =
-      capturedCount >= 10 ||
-      veh.inspectionStatus === 'COMPLETE' ||
-      zoneInspection?.status === 'COMPLETE';
+    const photos = [...(zoneInspection?.evidenceItems || []), ...caseEvidence];
+    const zonesStatus = GUIDED_CAPTURE_ZONES.map(zone => ({
+      ...zone,
+      isCaptured: photos.some(item => item.ruleKey === zone.ruleKey && hasVehiclePhoto(item, true)),
+    }));
+    const capturedCount = zonesStatus.filter(zone => zone.isCaptured).length;
+    const missingZones = zonesStatus.filter(zone => zone.isMandatory && !zone.isCaptured);
+    const isComplete = missingVehiclePhotos(photos, true).length === 0;
 
     // Defects from inspection or case
     const defects = [
@@ -240,9 +223,9 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
       const defectSummary = defects[0]?.description || veh.defectSummary || 'Defect detected';
       aiPrefix = `${totalDefects} defect${totalDefects > 1 ? 's' : ''} flagged by Vision AI`;
       aiText = ` (${defectSummary}).`;
-    } else if (isComplete || capturedCount >= 10) {
+    } else if (isComplete) {
       aiPrefix = 'Inspection Complete.';
-      aiText = ' All 10 zones captured and verified. Vision AI analysis confirms zero surface defects.';
+      aiText = ' All seven required photos uploaded. Vision AI analysis confirms zero surface defects.';
     } else {
       aiPrefix = 'AI found 0 defects so far.';
       const nextMissing = missingZones.slice(0, 3).map((z) => z.shortLabel.toLowerCase());
@@ -256,7 +239,7 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
     return {
       zonesStatus,
       capturedCount,
-      totalZones: 10,
+      totalZones: GUIDED_CAPTURE_ZONES.length,
       missingZones,
       isComplete,
       totalDefects,

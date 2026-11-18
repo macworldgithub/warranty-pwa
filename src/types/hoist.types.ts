@@ -5,6 +5,8 @@ export type ChecklistItemStatus = 'PASS' | 'FAULT' | 'NA';
 export type FaultSeverity = 'NONE' | 'MINOR' | 'MODERATE' | 'CRITICAL';
 
 export interface Hoist {
+  assignment?: { id: string; jobNumber?: string; vehicleRego?: string; assignedBy: string; assignedAt: string };
+
   id: string;
   hoistNumber: number;
   name: string;

@@ -1,3 +1,4 @@
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from './vehiclePhotos';
 import { EvidenceItem, QualityCheckResult, BrandPackRule } from '../types';
 
 export const qualityGates = {
@@ -85,34 +86,22 @@ export const qualityGates = {
     return { valid: true };
   },
 
-  /**
-   * Evaluates if a case has fulfilled the minimum gates required for workshop submission.
-   * Evidence photos are OPTIONAL — only critical text fields (VIN, concern) gate submission.
-   * Missing evidence items are reported informatively but do NOT block submission.
-   */
+  /** Seven vehicle photos are the minimum required for workshop submission. */
   evaluateSubmissionReadiness: (
     resolvedRules: BrandPackRule[],
     evidenceItems: EvidenceItem[]
   ): { isReady: boolean; missingRules: BrandPackRule[]; completedCount: number; mandatoryCount: number } => {
-    const mandatoryRules = resolvedRules.filter(r => r.isMandatory);
-    const missingRules: BrandPackRule[] = [];
-
-    mandatoryRules.forEach(rule => {
-      const hasEvidence = evidenceItems.some(
-        e => e.ruleKey === rule.ruleKey && (e.fileUri || e.serverUrl)
-      );
-      if (!hasEvidence) {
-        missingRules.push(rule);
-      }
-    });
-
-    const completedCount = mandatoryRules.length - missingRules.length;
-
+    const mandatoryRules: BrandPackRule[] = VEHICLE_PHOTO_CATEGORIES.filter(category => category.isMandatory).map(category => ({
+      id: category.ruleKey, ruleKey: category.ruleKey, name: category.name,
+      description: category.description, mediaType: 'image', tier: 1, isMandatory: true,
+      namingConvention: '[DealerRONumber]' + category.ruleKey + '.jpg',
+    }));
+    const missingRules = mandatoryRules.filter(rule => !evidenceItems.some(item =>
+      item.ruleKey === rule.ruleKey && hasVehiclePhoto(item)));
     return {
-      // Evidence photos no longer gate submission — submit is always ready
-      isReady: true,
+      isReady: missingRules.length === 0,
       missingRules,
-      completedCount,
+      completedCount: mandatoryRules.length - missingRules.length,
       mandatoryCount: mandatoryRules.length,
     };
   },

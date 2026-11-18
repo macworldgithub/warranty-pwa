@@ -1,3 +1,4 @@
+import { missingVehiclePhotos } from '../services/vehiclePhotos';
 import { apiClient } from '../api/client';
 import { appendMedia, isLocalMedia, persist, serializeMedia } from '../../web/storage';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -617,6 +618,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const saveDraft = () => saveSubmissionDraft(undefined, state.evidenceItems, true);
 
   const submitCase = async (): Promise<WarrantyCase> => {
+    const missingPhotos = missingVehiclePhotos(state.evidenceItems);
+    if (missingPhotos.length) throw new Error('Required vehicle photos missing: ' + missingPhotos.map(photo => photo.name).join(', '));
     const submittingUser = user?.id;
     const submittingToken = apiClient.getToken();
     const apiUrl = ENV.API_URL;

@@ -1,3 +1,4 @@
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from '../../services/vehiclePhotos';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -409,21 +410,10 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
     const activeStored =
       stored || allStored.find((i) => i.status === 'IN_PROGRESS') || allStored[0];
 
-    const wizardEvidenceKeys = wizard.evidenceItems
-      ? wizard.evidenceItems.map((e) => e.ruleKey)
-      : [];
-    const storageKeys = activeStored?.capturedZoneKeys || [];
-    const mergedCapturedKeys = Array.from(new Set([...storageKeys, ...wizardEvidenceKeys]));
-
-    const wizardCaptured = wizard.completedMandatoryCount || wizard.evidenceItems?.length || 0;
-
-    // Total vehicle zones is always 10 (Front, Rear, Driver Side, Passenger Side, Roof, Bonnet, Boot, Interior, Engine Bay, Cargo Tray)
-    const total = 10;
-    let captured = Math.max(mergedCapturedKeys.length, wizardCaptured);
-
-    if (captured === 0) {
-      captured = 6;
-    }
+    const total = VEHICLE_PHOTO_CATEGORIES.length;
+    const photos = [...(activeStored?.evidenceItems || []), ...(wizard.evidenceItems || [])];
+    const captured = VEHICLE_PHOTO_CATEGORIES.filter(category => photos.some(item =>
+      item.ruleKey === category.ruleKey && hasVehiclePhoto(item))).length;
 
     const roNum = wizard.roNumber || activeStored?.roNumber || '180001';
     const vehicleTitle = wizard.model

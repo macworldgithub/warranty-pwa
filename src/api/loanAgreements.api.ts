@@ -26,6 +26,7 @@ export const loanAgreementsApi = {
   },
   findById: stored,
   issueAgreement: async (dto: any): Promise<LoanAgreement> => {
+    if (dto.reservationId) return apiClient.post<LoanAgreement>('/loan-agreements/issue', dto);
     const id = 'local_loan_' + crypto.randomUUID();
     const optimistic = { ...dto, id, agreementNumber: 'Pending sync', status: 'DRAFT', loanStartDateTime: new Date().toISOString(), templateVersion: 'v2026.1', createdAt: new Date().toISOString() };
     return durableMutation({ method: 'POST', endpoint: '/loan-agreements/issue', body: dto, localId: id, collection: 'loans', optimistic });

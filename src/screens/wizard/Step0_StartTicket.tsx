@@ -36,6 +36,7 @@ const MOCK_BRANDS: Brand[] = [
   { id: 'brand_toyota', name: 'Toyota' },
   { id: 'brand_ford', name: 'Ford' },
   { id: 'brand_mitsubishi', name: 'Mitsubishi' },
+  { id: 'brand_gwm', name: 'GWM' },
 ];
 
 export const Step0_StartTicket: React.FC<Step0Props> = ({ onNext, onCancel }) => {

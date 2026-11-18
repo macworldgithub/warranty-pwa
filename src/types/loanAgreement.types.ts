@@ -85,6 +85,8 @@ export type LoanAgreementStatus =
   | 'DISPUTED';
 
 export interface LoanAgreement {
+  reservationId?: string;
+  loanerName?: string;
   id: string;
   agreementNumber: string;
   siteId: string;

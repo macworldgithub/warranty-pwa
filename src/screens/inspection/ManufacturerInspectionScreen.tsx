@@ -1,3 +1,4 @@
+import { missingVehiclePhotos, withVehiclePhotoRules } from '../../services/vehiclePhotos';
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Header } from '../../components/common/Header';
@@ -41,6 +42,7 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
   const [packLoading, setPackLoading] = useState(false);
   const [error, setError] = useState('');
   const [packError, setPackError] = useState('');
+  const [uploadError, setUploadError] = useState('');
   const [inspection, setInspection] = useState<VehicleZoneInspection | null>(null);
   const [retry, setRetry] = useState(0);
 
@@ -71,7 +73,7 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
     setPackLoading(true);
     brandPacksApi.getActiveByBrandId(brandId).then(result => {
       if (result.brandId !== brandId || result.status !== 'PUBLISHED') throw new Error('Incorrect manufacturer pack');
-      if (!cancelled) setPack(result);
+      if (!cancelled) setPack({ ...result, rules: withVehiclePhotoRules(result.rules) });
     }).catch(() => {
       if (!cancelled) setPackError('Published evidence requirements are unavailable for this manufacturer. Ask your warranty administrator to publish its pack.');
     }).finally(() => { if (!cancelled) setPackLoading(false); });
@@ -99,19 +101,20 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
   };
   const saveEvidence = (item: Partial<EvidenceItem> & { ruleKey: string }) => {
     if (!inspection || !pack || !vehicle) return;
+    setUploadError('');
     const latest = offlineStorage.getVehicleInspection(inspection.vin);
     if (!latest || latest.brandPackId !== pack.id || latest.brandPackVersion !== pack.version) return;
     const rule = pack.rules.find(entry => entry.ruleKey === item.ruleKey);
     if (!rule) return;
     const evidence: EvidenceItem = {
-      ...item, id: item.id || `ev_${Date.now()}_${rule.ruleKey}`, ruleKey: rule.ruleKey,
+      ...item, storageUrl: undefined, serverUrl: undefined, isUploaded: false, id: item.id || `ev_${Date.now()}_${rule.ruleKey}`, ruleKey: rule.ruleKey,
       ruleName: rule.name, mediaType: rule.mediaType, isMandatory: rule.isMandatory,
       tier: rule.tier, oemFileName: namingEngine.generateOemFileName(rule, inspection.roNumber || 'RO'),
     };
     const next = { ...latest, evidenceItems: [...latest.evidenceItems.filter(entry => entry.ruleKey !== rule.ruleKey), evidence], capturedZoneKeys: [...new Set([...latest.capturedZoneKeys, rule.ruleKey])] };
     persist(next);
-    void evidenceUploadService.uploadEvidenceToServer({ vin: inspection.vin, roNumber: inspection.roNumber, evidenceItem: evidence, vehicleDetails: vehicle, brandId: pack.brandId, siteId: vehicle.siteId, brandPackId: pack.id, brandPackVersion: pack.version }).then(result => {
-      if (!result.success || !result.storageUrl) return;
+    void evidenceUploadService.uploadEvidenceToServer({ vin: inspection.vin, roNumber: inspection.roNumber, evidenceItem: evidence, vehicleDetails: vehicle, technicianId: user?.id, technicianName: user?.name, brandId: pack.brandId, siteId: vehicle.siteId, brandPackId: pack.id, brandPackVersion: pack.version }).then(result => {
+      if (!result.success || !result.storageUrl) { setUploadError('Photo saved on this device. Reconnect and retry its upload before completing.'); return; }
       const latest = offlineStorage.getVehicleInspection(inspection.vin);
       if (!latest || latest.brandPackId !== pack.id || latest.brandPackVersion !== pack.version) return;
       const updated = { ...latest, evidenceItems: latest.evidenceItems.map(entry => entry.id === evidence.id ? { ...entry, storageUrl: result.storageUrl, isUploaded: true } : entry) };
@@ -121,7 +124,8 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
   };
   const evidenceForRule = (key: string) => inspection?.evidenceItems.find(item => item.ruleKey === key);
   const missingRequiredRules = pack?.rules.filter(rule => rule.isMandatory && !getEvidenceFileUri(evidenceForRule(rule.ruleKey))) ?? [];
-  const ready = Boolean(inspection && pack?.rules.length && missingRequiredRules.length === 0);
+  const missingPhotoUploads = missingVehiclePhotos(inspection?.evidenceItems || [], true);
+  const ready = Boolean(missingPhotoUploads.length === 0 && inspection && pack?.rules.length && missingRequiredRules.length === 0);
 
   return <View style={styles.container}>
     <Header title={vehicle ? 'Manufacturer Evidence Capture' : 'New Inspection'} onBack={onBack} onLogout={onLogout} showBrandLogo={false} />
@@ -149,6 +153,14 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
               {inspection && pack.rules.map(rule => <EvidenceCard key={`${pack.id}_${rule.ruleKey}`} rule={rule} evidence={evidenceForRule(rule.ruleKey)} roNumber={inspection.roNumber || 'RO'} onSaveEvidence={saveEvidence} onRemoveEvidence={key => persist({ ...inspection, evidenceItems: inspection.evidenceItems.filter(item => item.ruleKey !== key), capturedZoneKeys: inspection.capturedZoneKeys.filter(item => item !== key), status: 'IN_PROGRESS' })} onAddVoiceNote={saveVoiceNote} />)}
               {inspection?.voiceNotes?.map(note => <Text key={note.id} style={styles.card}>{note.transcript}</Text>)}
               {inspection && missingRequiredRules.length > 0 && <Text style={styles.description} accessibilityLiveRegion="polite">Required evidence still missing: {missingRequiredRules.map(rule => rule.name).join(', ')}</Text>}
+              {!!uploadError && <Text style={styles.description} accessibilityRole="alert">{uploadError}</Text>}
+              {inspection && missingPhotoUploads.length > 0 && <Text style={styles.description}>
+                Required photo uploads remaining: {missingPhotoUploads.map(photo => photo.name).join(', ')}. MODIFICATIONS is optional.
+              </Text>}
+              {inspection && missingPhotoUploads.map(photo => {
+                const evidence = inspection.evidenceItems.find(item => item.ruleKey === photo.ruleKey);
+                return evidence?.fileUri ? <Button key={photo.ruleKey} title={`Retry ${photo.name} upload`} onPress={() => saveEvidence(evidence)} /> : null;
+              })}
               <Button title="Complete & Save Inspection" disabled={!ready} onPress={() => { if (ready && inspection) { persist({ ...inspection, status: 'COMPLETE' }); onCompleteInspection?.(vehicle); } }} />
             </>}
           </>}

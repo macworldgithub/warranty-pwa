@@ -1,3 +1,5 @@
+import { LoanReservationsPanel } from './LoanReservationsPanel';
+import { LoanReservation } from '../../types/loanReservation.types';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View,
@@ -173,6 +175,7 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
   const loanDataRequest = useRef(0);
 
   // Modals / Subscreens
+  const [reservationTarget, setReservationTarget] = useState<LoanReservation | null>(null);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardPurpose, setWizardPurpose] = useState<'SERVICE_LOANER' | 'TEST_DRIVE'>('SERVICE_LOANER');
   const [returnTarget, setReturnTarget] = useState<LoanAgreement | null>(null);
@@ -318,13 +321,15 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
 
     return (
       <IssueLoanerWizardScreen
-        initialRooftop={activeLabel}
-        isRooftopLocked={isTechnician || isClerk}
-        allowedSiteIds={isTechnician || isClerk ? [technicianSiteId] : undefined}
+        reservation={reservationTarget || undefined}
+        initialRooftop={reservationTarget ? siteLabel(siteById(reservationTarget.siteId)) : activeLabel}
+        isRooftopLocked={!!reservationTarget || isTechnician || isClerk}
+        allowedSiteIds={reservationTarget ? [reservationTarget.siteId] : isTechnician || isClerk ? [technicianSiteId] : undefined}
         purpose={wizardPurpose}
-        onBack={() => setIsWizardOpen(false)}
+        onBack={() => { setIsWizardOpen(false); setReservationTarget(null); }}
         onSuccess={(_newAgreement) => {
           setIsWizardOpen(false);
+          setReservationTarget(null);
           setAgreements((prev) => [_newAgreement, ...prev.filter((a) => a.id !== _newAgreement.id)]);
           fetchLoanData();
         }}
@@ -466,6 +471,15 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
         </View>
 
         {/* ── KPI STAT CARDS ─────────────────────────────────── */}
+        <LoanReservationsPanel
+          siteId={isTechnician || isClerk ? technicianSiteId : selectedSiteId}
+          sites={siteOptions}
+          onIssue={reservation => {
+            setReservationTarget(reservation);
+            setWizardPurpose('SERVICE_LOANER');
+            setIsWizardOpen(true);
+          }}
+        />
         <View style={styles.kpiRow}>
           <View style={[styles.kpiCard, styles.kpiCardLeft]}>
             <View style={styles.kpiIconBox}>
@@ -569,7 +583,7 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
                   <View style={styles.colSpecItem}>
                     <Text style={styles.specLabel}>Loaner</Text>
                     <Text style={styles.specValueMain}>
-                      {item.vehicle?.model?.toUpperCase() || 'BYD DOLPHIN'} • {item.vehicle?.rego || 'CRN-882'}
+                      {item.loanerName ? `${item.loanerName} - ` : ''}{item.vehicle?.model?.toUpperCase() || 'BYD DOLPHIN'} • {item.vehicle?.rego || 'CRN-882'}
                     </Text>
                   </View>
                   <View style={styles.colSpecDivider} />

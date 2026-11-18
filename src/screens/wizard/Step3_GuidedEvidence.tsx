@@ -1,3 +1,4 @@
+import { VEHICLE_PHOTO_CATEGORIES, missingVehiclePhotos } from '../../services/vehiclePhotos';
 import React from 'react';
 import {
   View,
@@ -46,7 +47,7 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
       r.tier === 1 &&
       r.ruleKey !== 'vin_photo' &&
       r.ruleKey !== 'odometer_photo' &&
-      r.ruleKey !== 'front_vehicle_photo'
+      !VEHICLE_PHOTO_CATEGORIES.some(category => category.ruleKey === r.ruleKey)
   );
 
   // Check how many mandatory Tier 1 items are completed
@@ -56,6 +57,8 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
     return !!ev?.fileUri || !!ev?.serverUrl;
   });
 
+  const missingPhotos = missingVehiclePhotos(evidenceItems);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Header */}
@@ -63,8 +66,8 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         <View style={styles.titleRow}>
           <Text style={styles.sectionTitle}>Evidence Photos</Text>
           <Badge
-            label={`${completedTier1.length} Captured`}
-            variant={completedTier1.length > 0 ? 'success' : 'neutral'}
+            label={`${7 - missingPhotos.length}/7 required photos`}
+            variant={missingPhotos.length === 0 ? 'success' : 'neutral'}
             size="sm"
           />
         </View>
@@ -103,15 +106,13 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         </View>
       )}
 
-      {/* Use the legacy generic path only while no manufacturer rules are available. */}
-      {!isLoadingRules && resolvedRules.length === 0 && (
+      {/* Required vehicle photos apply to every manufacturer. */}
         <GuidedZoneStepper
           evidenceItems={evidenceItems}
           onSaveEvidence={saveEvidenceItem}
           onRemoveEvidence={removeEvidenceItem}
           roNumber={roNumber}
         />
-      )}
 
       {/* Dynamic Evidence Cards */}
       {tier1Rules.map(rule => {
@@ -141,6 +142,9 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         </Card>
       )}
 
+      {missingPhotos.length > 0 && <Text style={styles.sectionDesc}>
+        Required photos still needed: {missingPhotos.map(photo => photo.name).join(', ')}. MODIFICATIONS is optional.
+      </Text>}
       {/* Nav Row */}
       <View style={styles.navRow}>
         <Button
@@ -153,6 +157,7 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         <Button
           title="Component Photos"
           variant="primary"
+          disabled={missingPhotos.length > 0 || isLoadingRules}
           onPress={onNext}
           rightIcon={<Icon name="chevron-right" size={18} color={colors.textInverse} />}
           style={{ flex: 2 }}

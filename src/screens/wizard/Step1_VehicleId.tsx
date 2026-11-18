@@ -64,7 +64,7 @@ export const Step1_VehicleId: React.FC<Step1Props> = ({ onNext, onPrev }) => {
   const hasOdoReading = odometer !== null && odometer >= 0;
   const hasFrontPhoto = !!frontEvidence?.fileUri;
 
-  // Only VIN text + odometer reading are required to proceed. Photos are optional captures.
+  // Only VIN text + odometer reading are required to proceed. Required photos can also be captured in the Evidence Photos step.
   const isGatePassed = hasVinString && hasOdoReading;
 
   const formatCapturedAt = (value?: string) => {
@@ -329,7 +329,7 @@ export const Step1_VehicleId: React.FC<Step1Props> = ({ onNext, onPrev }) => {
 
         <View style={styles.captureRow}>
           <Button
-            title={hasOdoPhoto ? 'Retake Photo' : 'Photo Odometer (Optional)'}
+            title={hasOdoPhoto ? 'Retake Photo' : 'Photo ODO/DASH (Required)'}
             variant={hasOdoPhoto ? 'outline' : 'secondary'}
             size="sm"
             loading={isCapturingPhoto === 'odometer_photo'}
@@ -371,7 +371,7 @@ export const Step1_VehicleId: React.FC<Step1Props> = ({ onNext, onPrev }) => {
 
       {/* 3. Front of Vehicle Photo */}
       <Card
-        title="Front Vehicle Photo (Optional)"
+        title="FRONT Photo (Required)"
         rightAction={
           hasFrontPhoto ? (
             <Badge label="Attached" variant="success" size="sm" />

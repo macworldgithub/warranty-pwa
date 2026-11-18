@@ -1,3 +1,4 @@
+import { HoistAssignmentPanel } from './HoistAssignmentPanel';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -176,7 +177,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
   }, [inspections, selectedFacility, logFilter, searchQuery]);
 
   // Compliance calculations
-  const totalBays = summary?.totalHoists || hoists.length || 23;
+  const totalBays = summary?.totalHoists ?? hoists.length;
   const inspectedBays = summary?.inspectedToday || 0;
   const pendingBays = summary?.pendingToday || Math.max(0, totalBays - inspectedBays);
   const complianceRate = totalBays > 0 ? Math.round((inspectedBays / totalBays) * 100) : 0;
@@ -501,11 +502,11 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
                       <View style={styles.hoistCardHeader}>
                         <View style={styles.hoistNumberBadge}>
                           <Text style={styles.hoistNumberText}>
-                            {String(hoist.hoistNumber).padStart(2, '0')}
+                            {hoist.hoistNumber}
                           </Text>
                         </View>
                         <View style={styles.hoistTitleBlock}>
-                          <Text style={styles.hoistName}>{hoist.name}</Text>
+                          <Text style={styles.hoistName}>{`Hoist ${hoist.hoistNumber}`}</Text>
                           <Text style={styles.hoistFacility}>{hoist.facilityName}</Text>
                         </View>
                         <View
@@ -602,6 +603,9 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
                         </View>
                       ) : null}
 
+                      <HoistAssignmentPanel hoist={hoist} onUpdated={updated => {
+                        setHoists(current => current.map(item => item.id === updated.id ? updated : item));
+                      }} />
                       {/* Card Actions */}
                       <View style={styles.cardActions}>
                         <TouchableOpacity
@@ -758,7 +762,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
                       <View style={styles.lotoLeft}>
                         <Lock size={16} color="#DC2626" />
                         <Text style={styles.lotoBayTitle}>
-                          Bay {h.hoistNumber} - {h.name}
+                          Hoist {h.hoistNumber}
                         </Text>
                       </View>
                       <View style={styles.lotoBadge}>
@@ -947,7 +951,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
 
                     <View style={styles.logCardMiddle}>
                       <View style={styles.logBayBadge}>
-                        <Text style={styles.logBayBadgeText}>Bay {log.hoistNumber}</Text>
+                        <Text style={styles.logBayBadgeText}>Hoist {log.hoistNumber}</Text>
                       </View>
                       <View style={styles.logTimeCol}>
                         <Text style={styles.logFacilityText}>
@@ -1009,7 +1013,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>
-                  Bay {selectedLogDetail?.hoistNumber} Pre-Shift Inspection
+                  Hoist {selectedLogDetail?.hoistNumber} Pre-Shift Inspection
                 </Text>
                 <Text style={styles.modalSubtitle}>
                   {selectedLogDetail?.shiftDate} · {selectedLogDetail?.inspectorName} (

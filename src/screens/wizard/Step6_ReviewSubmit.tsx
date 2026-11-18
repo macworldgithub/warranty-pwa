@@ -1,3 +1,4 @@
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto, withVehiclePhotoRules } from '../../services/vehiclePhotos';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -75,6 +76,10 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
   }, [submitting]);
 
   const handleSubmit = async () => {
+    if (!isReadyForSubmission) {
+      setSubmitError('Upload all seven required vehicle photos before submitting.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
 
@@ -116,7 +121,7 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
         <View style={styles.titleRow}>
           <Text style={styles.sectionTitle}>Review & Submit</Text>
           <Badge
-            label={missingRules.length === 0 ? 'All Evidence Attached' : `${missingRules.length} Optional Pending`}
+            label={missingRules.length === 0 ? 'All Evidence Attached' : `${missingRules.length} Required Missing`}
             variant={missingRules.length === 0 ? 'success' : 'neutral'}
             size="sm"
           />
@@ -202,16 +207,18 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
 
       {/* 3. Evidence Checklist */}
       <Card
-        title={`Evidence Items (${evidenceItems.length}/${resolvedRules.length})`}
+        title={`Vehicle Photos (${completedMandatoryCount}/7 required)`}
       >
         <View style={styles.checklist}>
-          {resolvedRules.map((rule, idx) => {
+          {withVehiclePhotoRules(resolvedRules).map((rule, idx) => {
             const ev = evidenceItems.find(e => e.ruleKey === rule.ruleKey);
-            const isPresent = !!ev?.fileUri || !!ev?.serverUrl;
+            const isPresent = VEHICLE_PHOTO_CATEGORIES.some(photo => photo.ruleKey === rule.ruleKey)
+              ? hasVehiclePhoto(ev)
+              : Boolean(ev?.fileUri || ev?.storageUrl || ev?.serverUrl);
 
             return (
               <View
-                key={rule.id || rule.ruleKey}
+                key={rule.ruleKey}
                 style={[
                   styles.checklistItem,
                   isPresent ? styles.itemPass : styles.itemFail,
@@ -235,7 +242,7 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
                 </View>
 
                 <Badge
-                  label={isPresent ? 'Ready' : 'Optional'}
+                  label={isPresent ? 'Ready' : rule.isMandatory ? 'Required' : 'Optional'}
                   variant={isPresent ? 'success' : 'neutral'}
                   size="sm"
                 />
@@ -283,7 +290,7 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
           variant="primary"
           size="huge"
           loading={submitting}
-          disabled={submitting}
+          disabled={submitting || !isReadyForSubmission}
           onPress={handleSubmit}
           leftIcon={<Icon name="check-circle" size={22} color={colors.textInverse} />}
           fullWidth

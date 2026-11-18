@@ -1,3 +1,4 @@
+import { hasVehiclePhoto, missingVehiclePhotos } from '../../services/vehiclePhotos';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
@@ -69,7 +70,7 @@ const DEFAULT_VEHICLE: RooftopVehicle = {
   warrantyStatus: 'Active Claim',
   inspectionStatus: 'IN_PROGRESS',
   capturedZones: 2,
-  totalZones: 10,
+  totalZones: GUIDED_CAPTURE_ZONES.length,
   defectCount: 0,
   caseCount: 1,
 };
@@ -119,7 +120,7 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
         warrantyStatus: 'Active Claim',
         inspectionStatus: 'IN_PROGRESS',
         capturedZones: 0,
-        totalZones: 10,
+        totalZones: GUIDED_CAPTURE_ZONES.length,
         defectCount: 0,
         caseCount: 1,
       };
@@ -146,7 +147,7 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
   // Active Zone state: defaults to first uncaptured zone
   const [selectedZoneIndex, setSelectedZoneIndex] = useState<number>(() => {
     const firstUncaptured = GUIDED_CAPTURE_ZONES.findIndex(
-      (z) => !inspection.capturedZoneKeys.includes(z.ruleKey)
+      (z) => !hasVehiclePhoto(inspection.evidenceItems.find(item => item.ruleKey === z.ruleKey), true)
     );
     return firstUncaptured >= 0 ? firstUncaptured : 0;
   });
@@ -166,19 +167,20 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
     return inspection.defects.find((d) => d.zoneKey === ruleKey);
   };
 
-  const capturedCount = inspection.capturedZoneKeys.length;
-  const isAllCaptured = capturedCount >= 10;
+  const capturedCount = GUIDED_CAPTURE_ZONES.filter(zone => hasVehiclePhoto(getZoneEvidence(zone.ruleKey), true)).length;
+  const missingPhotos = missingVehiclePhotos(inspection.evidenceItems, true);
+  const isAllCaptured = missingPhotos.length === 0;
 
   // Handle Photo Capture
-  const handleCapturePhoto = async (fromGallery: boolean = false) => {
+  const handleCapturePhoto = async (fromGallery: boolean = false, retryUpload: boolean = false) => {
     setIsCapturing(true);
     try {
       // Determine target zone: If current zone is already captured, advance to first uncaptured zone
       let targetZone = currentZone;
-      const isAlreadyCaptured = inspection.capturedZoneKeys.includes(currentZone.ruleKey);
+      const isAlreadyCaptured = hasVehiclePhoto(getZoneEvidence(currentZone.ruleKey), true);
       if (isAlreadyCaptured) {
         const nextUncaptured = GUIDED_CAPTURE_ZONES.find(
-          (z) => !inspection.capturedZoneKeys.includes(z.ruleKey)
+          (z) => !hasVehiclePhoto(inspection.evidenceItems.find(item => item.ruleKey === z.ruleKey), true)
         );
         if (nextUncaptured) {
           targetZone = nextUncaptured;
@@ -190,13 +192,13 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
       }
 
       let res;
-      if (fromGallery) {
+      if (retryUpload && getZoneEvidence(targetZone.ruleKey)?.fileUri) {
+        res = { success: true, fileUri: getZoneEvidence(targetZone.ruleKey)!.fileUri, fileSize: getZoneEvidence(targetZone.ruleKey)?.fileSize };
+      } else if (fromGallery) {
         res = await cameraService.pickFromGallery(false);
       } else {
         res = await cameraService.capturePhoto(targetZone.ruleKey);
       }
-
-      setIsCapturing(false);
 
       if (res.success && res.fileUri) {
         const newEvidence: EvidenceItem = {
@@ -219,11 +221,16 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
         saveEvidenceItem(newEvidence);
 
         // 3. Upload file to backend /uploads folder and save in MongoDB
-        evidenceUploadService.uploadEvidenceToServer({
+        await evidenceUploadService.uploadEvidenceToServer({
           vin: cleanVin,
+          siteId: activeVehicle.siteId,
+          technicianId: user?.id,
+          technicianName: user?.name,
+          brandId: activeVehicle.latestCase?.brandId || `brand_${activeVehicle.make.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
           roNumber: inspection.roNumber || '180001',
           evidenceItem: newEvidence,
           vehicleDetails: {
+            odometer: activeVehicle.odometer,
             make: activeVehicle.make,
             model: activeVehicle.model,
             year: activeVehicle.year,
@@ -233,9 +240,16 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
           if (uploadRes.success && uploadRes.storageUrl) {
             // Update local evidence with server storage URL
             newEvidence.storageUrl = uploadRes.storageUrl;
-            offlineStorage.recordZoneCapture(cleanVin, targetZone.ruleKey, newEvidence);
+            const uploaded = offlineStorage.recordZoneCapture(cleanVin, targetZone.ruleKey, newEvidence);
+            setInspection({ ...uploaded });
+            saveEvidenceItem(newEvidence);
+          } else {
+            Alert.alert('Photo not uploaded', 'The photo is saved on this device. Upload it before completing the inspection.');
           }
-        }).catch((e) => console.warn('[GuidedZoneCaptureScreen] Server upload failed:', e));
+        }).catch((e) => {
+          console.warn('[GuidedZoneCaptureScreen] Server upload failed:', e);
+          Alert.alert('Upload failed', 'Reconnect and retry this photo before completing the inspection.');
+        });
 
         // 3. Auto advance to next uncaptured zone
         const nextIndex = GUIDED_CAPTURE_ZONES.findIndex(
@@ -250,6 +264,8 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
     } catch (err) {
       setIsCapturing(false);
       console.warn('Capture error in GuidedZoneCaptureScreen:', err);
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -391,7 +407,7 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
           </View>
           <View style={styles.statusPill}>
             <Text style={styles.statusPillText}>
-              {inspection.status === 'COMPLETE' ? 'COMPLETE' : 'IN PROGRESS'}
+              {isAllCaptured ? 'COMPLETE' : 'IN PROGRESS'}
             </Text>
           </View>
         </View>
@@ -400,7 +416,7 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionHeaderTitle}>GUIDED ZONE CAPTURE</Text>
           <Text style={styles.sectionHeaderSub}>
-            {capturedCount} of 10 zones photographed.
+            {7 - missingPhotos.length} of 7 required photos uploaded.
           </Text>
         </View>
 
@@ -444,7 +460,7 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
 
                 {isSelected && (
                   <View style={styles.zoneSelectedPill}>
-                    <Text style={styles.zoneSelectedPillText}>{idx + 1} of 10</Text>
+                    <Text style={styles.zoneSelectedPillText}>{idx + 1} of {GUIDED_CAPTURE_ZONES.length}</Text>
                   </View>
                 )}
 
@@ -466,9 +482,9 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
         <View style={styles.activeZoneCard}>
           <View style={styles.activeZoneHeader}>
             <Text style={styles.activeZoneName}>{currentZone.name.toUpperCase()}</Text>
-            <Text style={styles.activeZoneStep}>{selectedZoneIndex + 1} of 10</Text>
+            <Text style={styles.activeZoneStep}>{selectedZoneIndex + 1} of {GUIDED_CAPTURE_ZONES.length}</Text>
           </View>
-          <Text style={styles.activeZoneDesc}>{currentZone.description}</Text>
+          <Text style={styles.activeZoneDesc}>{currentZone.isMandatory ? 'Required. ' : 'Optional. '}{currentZone.description}</Text>
 
           {/* Dashed Camera Upload Box */}
           <TouchableOpacity
@@ -603,9 +619,17 @@ export const GuidedZoneCaptureScreen: React.FC<GuidedZoneCaptureScreenProps> = (
             </TouchableOpacity>
           )}
 
+          {missingPhotos.length > 0 && <Text style={styles.activeZoneDesc}>
+            Required uploads remaining: {missingPhotos.map(photo => photo.name).join(', ')}. MODIFICATIONS is optional.
+          </Text>}
+          {hasCurrentZonePhoto && !hasVehiclePhoto(currentZoneEvidence, true) && <TouchableOpacity
+            style={styles.mainActionBtn} disabled={isCapturing} onPress={() => handleCapturePhoto(false, true)}>
+            <Text style={styles.mainActionBtnText}>{isCapturing ? 'Uploading...' : 'Upload saved photo'}</Text>
+          </TouchableOpacity>}
           {/* Big Action Button */}
           <TouchableOpacity
             style={styles.mainActionBtn}
+            disabled={isCapturing}
             onPress={() => {
               if (isAllCaptured && onCompleteInspection) {
                 onCompleteInspection(activeVehicle);

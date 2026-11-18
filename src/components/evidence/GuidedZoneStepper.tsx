@@ -1,3 +1,4 @@
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from '../../services/vehiclePhotos';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -26,88 +27,9 @@ export interface CaptureZone {
   isMandatory?: boolean;
 }
 
-export const GUIDED_CAPTURE_ZONES: CaptureZone[] = [
-  {
-    id: 'zone_1',
-    ruleKey: 'front_vehicle_photo',
-    name: 'Front',
-    shortLabel: 'Front',
-    description: 'Capture the full front of the vehicle including bumper, grille, headlights and number plate.',
-    isMandatory: true,
-  },
-  {
-    id: 'zone_2',
-    ruleKey: 'rear_vehicle_photo',
-    name: 'Rear',
-    shortLabel: 'Rear',
-    description: 'Capture the complete rear end including boot/tailgate, taillights, badges and exhaust area.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_3',
-    ruleKey: 'driver_side_photo',
-    name: 'Driver Side',
-    shortLabel: 'Driver Side',
-    description: 'Capture full profile of the driver side from front quarter panel to rear bumper.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_4',
-    ruleKey: 'passenger_side_photo',
-    name: 'Passenger Side',
-    shortLabel: 'Passenger Side',
-    description: 'Capture full profile of the passenger side showing doors, sill and wheels.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_5',
-    ruleKey: 'roof_photo',
-    name: 'Roof',
-    shortLabel: 'Roof',
-    description: 'Capture roof panel, sunroof/panoramic glass, roof rails, and antenna mount.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_6',
-    ruleKey: 'bonnet_photo',
-    name: 'Bonnet',
-    shortLabel: 'Bonnet',
-    description: 'Close inspection photo of the bonnet panel, shut lines, and leading edge.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_7',
-    ruleKey: 'boot_photo',
-    name: 'Boot',
-    shortLabel: 'Boot',
-    description: 'Open boot/tailgate view showing cargo compartment, spare wheel well, and seals.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_8',
-    ruleKey: 'interior_photo',
-    name: 'Interior',
-    shortLabel: 'Interior',
-    description: 'Wide shot of cabin dashboard, steering wheel, seats, center console and touchscreen.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_9',
-    ruleKey: 'engine_bay_photo',
-    name: 'Engine Bay',
-    shortLabel: 'Engine Bay',
-    description: 'Top-down photo of engine bay or HV battery electronics with covers visible.',
-    isMandatory: false,
-  },
-  {
-    id: 'zone_10',
-    ruleKey: 'cargo_tray_photo',
-    name: 'Cargo Tray',
-    shortLabel: 'Cargo Tray',
-    description: 'Ute tub / cargo tray condition, bedliner, tie-down rails and tailgate hinge.',
-    isMandatory: false,
-  },
-];
+export const GUIDED_CAPTURE_ZONES: CaptureZone[] = VEHICLE_PHOTO_CATEGORIES.map((category, index) => ({
+  ...category, id: `vehicle_photo_${index + 1}`, shortLabel: category.name,
+}));
 
 interface GuidedZoneStepperProps {
   evidenceItems: EvidenceItem[];
@@ -173,7 +95,7 @@ export const GuidedZoneStepper: React.FC<GuidedZoneStepperProps> = ({
   // Count how many zones have been photographed
   const completedZonesCount = GUIDED_CAPTURE_ZONES.filter(z => {
     const ev = getZoneEvidence(z.ruleKey);
-    return !!ev?.fileUri || !!ev?.storageUrl || !!ev?.serverUrl;
+    return hasVehiclePhoto(ev);
   }).length;
 
   // Handle Photo Capture
@@ -307,7 +229,7 @@ export const GuidedZoneStepper: React.FC<GuidedZoneStepperProps> = ({
               </Text>
             </Text>
             <Text style={styles.zoneInstructionText}>
-              {currentZone.description}
+              {currentZone.isMandatory ? 'Required. ' : 'Optional. '}{currentZone.description}
             </Text>
           </View>
         </View>

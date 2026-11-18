@@ -1,3 +1,4 @@
+import { LoanReservation } from '../../types/loanReservation.types';
 import { signatureToDataUrl } from '../../../web/signature';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -26,12 +27,13 @@ import { sitesApi } from '../../api/sites.api';
 import { LoanAgreement, Site } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useGeofence } from '../../context/GeofenceContext';
-import { formatDateForInput } from '../../utils/date';
+import { formatDateForInput, formatDateTimeForInput } from '../../utils/date';
 import { ENV } from '../../config/env';
 
 import booranLogo from '../../assets/images/booran-motors-transparent.png';
 
 interface IssueLoanerWizardScreenProps {
+  reservation?: LoanReservation;
   onBack: () => void;
   onSuccess: (agreement: LoanAgreement) => void;
   initialRooftop?: string;
@@ -138,6 +140,7 @@ export const IssueLoanerWizardScreen: React.FC<
   isRooftopLocked = false,
   allowedSiteIds,
   purpose = 'SERVICE_LOANER',
+  reservation,
 }) => {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -145,6 +148,7 @@ export const IssueLoanerWizardScreen: React.FC<
   const isOnSite = presenceStatus === 'ON_SITE';
   const isTestDrive = purpose === 'TEST_DRIVE';
   const agreementLabel = isTestDrive ? 'Test Drive' : 'Service Loaner';
+  const reservedReturn = formatDateTimeForInput(reservation?.endAt);
   const [siteOptions, setSiteOptions] = useState<Site[]>([]);
   const allowedRooftops = useMemo(() => {
     const activeSites = siteOptions.filter((site) => site.isActive !== false);
@@ -204,8 +208,9 @@ export const IssueLoanerWizardScreen: React.FC<
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Section 1: Customer Details
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
+  const issuedReservationId = useRef<string | null>(null);
+  const [fullName, setFullName] = useState(reservation?.customerName || '');
+  const [phone, setPhone] = useState(reservation?.customerMobile || '');
   const [email, setEmail] = useState('');
   const [address, setAddress] = useState('');
   const [licenceNumber, setLicenceNumber] = useState('');
@@ -241,8 +246,8 @@ export const IssueLoanerWizardScreen: React.FC<
   const [vin, setVin] = useState('');
   const [showExpectedDatePicker, setShowExpectedDatePicker] = useState(false);
   const [showExpectedTimePicker, setShowExpectedTimePicker] = useState(false);
-  const [expectedReturnDate, setExpectedReturnDate] = useState('');
-  const [expectedReturnTime, setExpectedReturnTime] = useState('');
+  const [expectedReturnDate, setExpectedReturnDate] = useState(reservedReturn.slice(0, 10));
+  const [expectedReturnTime, setExpectedReturnTime] = useState(reservedReturn.slice(11, 16));
   const datePickerValue = new Date(
     expectedReturnDate && expectedReturnTime
       ? `${expectedReturnDate}T${expectedReturnTime}`
@@ -487,6 +492,10 @@ export const IssueLoanerWizardScreen: React.FC<
       );
       return false;
     }
+    if (reservation && (expectedReturnDate !== reservedReturn.slice(0, 10) || expectedReturnTime !== reservedReturn.slice(11, 16))) {
+      Alert.alert('Reserved return time', 'Use the reserved return date and time for this handover.');
+      return false;
+    }
     if (!expectedReturnDate || !expectedReturnTime) {
       setOpenSections(prev => ({ ...prev, 2: true }));
       Alert.alert(
@@ -554,10 +563,12 @@ export const IssueLoanerWizardScreen: React.FC<
       );
 
       const createPayload = {
-        siteId: chosenRooftop.siteId,
+        reservationId: reservation?.id,
+        loanStartDateTime: reservation?.startAt,
+        siteId: reservation?.siteId || chosenRooftop.siteId,
         siteName: chosenRooftop.siteName,
         purpose: (isTestDrive ? 'TEST_DRIVE' : 'SERVICE_LOANER') as any,
-        dueBackDateTime: dueBackDate.toISOString(),
+        dueBackDateTime: reservation?.endAt || dueBackDate.toISOString(),
         customer: {
           name: fullName.trim(),
           dob: birthYear.trim() ? `${birthYear.trim()}-01-01` : undefined,
@@ -605,7 +616,10 @@ export const IssueLoanerWizardScreen: React.FC<
       let signed: any = null;
 
       try {
-        const created = await loanAgreementsApi.issueAgreement(createPayload);
+        const created = reservation && issuedReservationId.current
+          ? { id: issuedReservationId.current }
+          : await loanAgreementsApi.issueAgreement(createPayload);
+        if (reservation) issuedReservationId.current = created.id;
         signed = await loanAgreementsApi.signAgreement(created.id, {
           borrowerSignatureDataUrl: sigPayload,
           readAndAgreed,
@@ -615,6 +629,7 @@ export const IssueLoanerWizardScreen: React.FC<
             'STAFF_VERIFIED_' + staffName.toUpperCase().replace(/\s+/g, '_'),
         });
       } catch (apiErr: any) {
+        if (reservation) throw apiErr;
         throw apiErr;
       }
 
@@ -700,6 +715,15 @@ export const IssueLoanerWizardScreen: React.FC<
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {reservation && <View style={styles.rooftopCard}>
+          <View style={styles.rooftopDetails}>
+            <Text style={styles.rooftopName}>Handover: {reservation.loanerName}</Text>
+            <Text style={styles.dropdownSubtitle}>
+              {new Date(reservation.startAt).toLocaleString()} to {new Date(reservation.endAt).toLocaleString()}
+            </Text>
+            <Text style={styles.dropdownSubtitle}>Enter the actual vehicle registration below. Reserved times are fixed.</Text>
+          </View>
+        </View>}
         {/* Assigned Rooftop Card */}
         <View style={styles.rooftopCard}>
           <View style={styles.rooftopIconCircle}>
@@ -724,7 +748,7 @@ export const IssueLoanerWizardScreen: React.FC<
           <View style={styles.heroTitleRow}>
             <View>
               <Text style={styles.heroCategory}>COURTESY VEHICLES</Text>
-              <Text style={styles.heroTitle}>New loan agreement.</Text>
+              <Text style={styles.heroTitle}>{reservation ? reservation.loanerName : 'New loan agreement.'}</Text>
             </View>
             <View style={styles.accordionControls}>
               <TouchableOpacity
@@ -1168,6 +1192,7 @@ export const IssueLoanerWizardScreen: React.FC<
                   <Text style={styles.inputLabel}>Expected Return Date</Text>
                   <TouchableOpacity
                     style={[styles.input, styles.dateFieldContainer]}
+                    disabled={!!reservation}
                     onPress={() => setShowExpectedDatePicker(true)}
                   >
                     <View style={styles.dateFieldInner}>
@@ -1182,6 +1207,7 @@ export const IssueLoanerWizardScreen: React.FC<
                   <Text style={styles.inputLabel}>Return Time</Text>
                   <TouchableOpacity
                     style={[styles.input, styles.dateFieldContainer]}
+                    disabled={!!reservation}
                     onPress={() => setShowExpectedTimePicker(true)}
                   >
                     <View style={styles.dateFieldInner}>

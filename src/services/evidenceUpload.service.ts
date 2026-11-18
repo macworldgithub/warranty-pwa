@@ -1,3 +1,4 @@
+import { hasVehiclePhoto } from './vehiclePhotos';
 import { apiClient } from '../api/client';
 import { appendMedia, isLocalMedia, persist } from '../../web/storage';
 import { casesApi } from '../api/cases.api';
@@ -14,6 +15,8 @@ export const evidenceUploadService = {
     roNumber?: string;
     evidenceItem: EvidenceItem;
     caseId?: string;
+    technicianId?: string;
+    technicianName?: string;
     brandId?: string;
     siteId?: string;
     brandPackId?: string;
@@ -23,6 +26,7 @@ export const evidenceUploadService = {
       model?: string;
       year?: number;
       powertrain?: string;
+      odometer?: number;
     };
   }): Promise<{ success: boolean; storageUrl?: string; caseItem?: WarrantyCase }> => {
     const { vin, roNumber, evidenceItem, vehicleDetails } = params;
@@ -60,8 +64,14 @@ export const evidenceUploadService = {
             year: vehicleDetails?.year || 2024,
             powertrain: (vehicleDetails?.powertrain as any) || 'EV',
             concernTitle: `${vehicleDetails?.make || 'BYD'} ${vehicleDetails?.model || ''} Condition Inspection`,
-            faultCategory: 'Condition Inspection',
-            status: 'IN_PROGRESS',
+            faultCategory: 'General / other (Tier 1 only)',
+            odometer: vehicleDetails?.odometer ?? 0,
+            technicianId: params.technicianId || '',
+            technicianName: params.technicianName || '',
+            partReplaced: false,
+            noiseFault: false,
+            diagnosticsAvailable: false,
+            repairStage: 'Pre-repair only',
           } as any);
           targetCaseId = created.id;
         } catch (createErr) {
@@ -127,6 +137,8 @@ export const evidenceUploadService = {
           console.warn('[EvidenceUpload] addEvidence fallback failed:', addErr);
         }
       }
+
+      if (!hasVehiclePhoto({ ruleKey: evidenceItem.ruleKey, mediaType: 'image', storageUrl: serverStorageUrl }, true)) return { success: false };
 
       // 4. Update local offlineStorage with server URL if available
       checkSession();
