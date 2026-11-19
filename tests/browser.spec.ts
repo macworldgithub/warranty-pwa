@@ -59,11 +59,33 @@ test('the rooftop dropdown switches the current site across Drive, Loaners, and 
   await expect(driveDropdown.locator('option')).toHaveText([bayside.name, dandenong.name]);
   await driveDropdown.selectOption(bayside.id);
   await expect(driveDropdown).toHaveValue(bayside.id);
+  await expect(driveCard.getByText('Current', { exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 768, height: 1024 });
   await expect(driveCard.getByText('Current', { exact: true }).locator('xpath=../..')).toContainText(bayside.name);
+  await page.setViewportSize({ width: 390, height: 844 });
 
   await page.getByText('Home', { exact: true }).last().click();
   const homeDropdown = page.getByTestId('home-assigned-rooftops').getByRole('combobox', { name: 'Current rooftop' });
   await expect(homeDropdown).toHaveValue(bayside.id);
+  const homeCard = page.getByTestId('home-assigned-rooftops');
+  for (const width of [320, 390, 767, 768, 1024]) {
+    await page.setViewportSize({ width, height: 1024 });
+    await expect(homeCard.getByText('Current', { exact: true })).toHaveCount(width < 768 ? 0 : 1);
+    await expect.poll(async () => homeCard.evaluate(card => {
+      const bounds = card.getBoundingClientRect();
+      return [...card.querySelectorAll('*')].every(element => {
+        const box = element.getBoundingClientRect();
+        return (box.width === 0 && box.height === 0) || (box.left >= bounds.left && box.right <= bounds.right);
+      });
+    })).toBe(true);
+    if (width < 768) {
+      const dropdown = await homeDropdown.boundingBox();
+      const label = await homeCard.getByText('YOUR ASSIGNED ROOFTOPS', { exact: true }).boundingBox();
+      expect(Math.abs(dropdown!.x - label!.x)).toBeLessThan(1);
+      expect(label!.y).toBeGreaterThanOrEqual(dropdown!.y + dropdown!.height);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByText('Loaners', { exact: true }).click();
   const loanDropdown = page.getByTestId('loaners-assigned-rooftops').getByRole('combobox', { name: 'Current rooftop' });
   await expect(loanDropdown).toHaveValue(bayside.id);
