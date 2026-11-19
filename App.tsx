@@ -526,12 +526,10 @@ function MainNavigator() {
           onBack={() => setCurrentScreen(previousScreen || 'TECH_HOME')}
           onInspectHoist={(hoist) => {
             setSelectedHoist(hoist);
-            setPreviousScreen('HOIST_OVERVIEW');
             setCurrentScreen('HOIST_INSPECT');
           }}
           onViewHistory={(hoist) => {
             setSelectedHoist(hoist);
-            setPreviousScreen('HOIST_OVERVIEW');
             setCurrentScreen('HOIST_HISTORY');
           }}
           onOpenHome={() => {

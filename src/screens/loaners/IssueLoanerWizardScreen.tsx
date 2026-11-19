@@ -29,6 +29,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useGeofence } from '../../context/GeofenceContext';
 import { formatDateForInput, formatDateTimeForInput } from '../../utils/date';
 import { ENV } from '../../config/env';
+import { getLoanerIssueError } from '../../utils/loanerIssueError';
 
 import booranLogo from '../../assets/images/booran-motors-transparent.png';
 
@@ -643,11 +644,13 @@ export const IssueLoanerWizardScreen: React.FC<
           },
         ],
       );
-    } catch (err: any) {
-      Alert.alert(
-        'Issue Failed',
-        err?.message || 'Failed to submit loan agreement.',
-      );
+    } catch (err: unknown) {
+      const feedback = getLoanerIssueError(err);
+      setOpenSections(prev => ({
+        ...prev,
+        ...Object.fromEntries(feedback.sections.map(section => [section, true])),
+      }));
+      Alert.alert(feedback.title, feedback.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -943,7 +946,7 @@ export const IssueLoanerWizardScreen: React.FC<
                   />
                 </View>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Birth Year</Text>
+                  <Text style={styles.inputLabel}>Birth Year *</Text>
                   <TextInput
                     style={styles.input}
                     placeholder="1994"
@@ -956,6 +959,31 @@ export const IssueLoanerWizardScreen: React.FC<
                 </View>
               </View>
 
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Driver Licence Expiry Date *</Text>
+                <TouchableOpacity
+                  style={[styles.input, styles.dateFieldContainer]}
+                  onPress={() => setShowLicenceExpiryPicker(true)}
+                >
+                  <View style={styles.dateFieldInner}>
+                    <Icon name="calendar" size={16} color="#64748B" />
+                    <Text style={styles.dateFieldText}>
+                      {licenceExpiry || 'Select expiry date'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+              <DatePickerModal
+                visible={showLicenceExpiryPicker}
+                value={licenceExpiry ? new Date(`${licenceExpiry}T12:00:00`) : new Date()}
+                mode="date"
+                title="Licence Expiry Date"
+                onConfirm={date => {
+                  setShowLicenceExpiryPicker(false);
+                  setLicenceExpiry(formatDateForInput(date));
+                }}
+                onCancel={() => setShowLicenceExpiryPicker(false)}
+              />
               {/* Driver Licence Photo & Sighting */}
               <TouchableOpacity
                 style={[
@@ -1179,6 +1207,18 @@ export const IssueLoanerWizardScreen: React.FC<
                     onChangeText={setVehicleYear}
                   />
                 </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Vehicle VIN *</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter vehicle identification number"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="characters"
+                  value={vin}
+                  onChangeText={setVin}
+                />
               </View>
 
               {/* Schedule Dates */}

@@ -71,6 +71,10 @@ test('technician completes a hoist checklist and server-confirmed sign-off', asy
   const state = await setup(page); await page.getByText('Hoist Inspections', { exact: true }).click(); await page.getByText('Start Pre-Shift Check', { exact: true }).first().click();
   await page.getByText('All Pass', { exact: true }).click(); await page.getByText('Sign & Complete Inspection', { exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Inspection Submitted', exact: true })).toBeVisible(); expect(state.inspections).toHaveLength(1); expect(state.inspections[0].status).toBe('PASS');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByText('Daily Hoist Inspection', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back from hoist inspections', exact: true }).click();
+  await expect(page.getByText('APP MENU', { exact: true })).toBeVisible();
 });
 
 test('technician issues, signs and returns a courtesy vehicle agreement', async ({ page }) => {
