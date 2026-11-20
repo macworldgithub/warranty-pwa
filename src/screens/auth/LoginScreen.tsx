@@ -47,6 +47,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const insets = useSafeAreaInsets();
   const {
     login,
+    logout,
     registerTechnician,
     isLoading,
     sessionEnded,
@@ -55,6 +56,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // Mode: PIN_SETUP (First Login Flow) or SIGN_IN (Existing User Login)
   const [activeTab, setActiveTab] = useState<AuthTab>(sessionEnded ? 'SIGN_IN' : 'PIN_SETUP');
+  const [selectedLoginRole, setSelectedLoginRole] = useState<'TECHNICIAN' | 'CLERK'>('TECHNICIAN');
 
   // PIN Setup Phase: 1 = Enter PIN, 2 = Set Username, Password & Specific Sites
   const [pinStep, setPinStep] = useState<1 | 2>(1);
@@ -226,7 +228,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      await login(signInEmail.trim().toLowerCase(), signInPassword);
+      const authenticatedUser = await login(signInEmail.trim().toLowerCase(), signInPassword);
+      if (authenticatedUser.role !== selectedLoginRole) {
+        await logout();
+        setAuthError(`This account is registered as ${authenticatedUser.role === 'CLERK' ? 'a Clerk' : 'a Technician'}. Select the matching sign-in role.`);
+        return;
+      }
       onLoginSuccess();
     } catch (err: any) {
       setAuthError(err.message || 'Unable to sign in. Please verify your credentials.');
@@ -514,6 +521,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       ) : (
         /* ── FLOW 2: RETURNING USER SIGN IN ── */
         <View style={styles.form}>
+          <Text style={styles.fieldLabel}>Sign in as</Text>
+          <View style={styles.modeSwitch}>
+            {(['TECHNICIAN', 'CLERK'] as const).map((role) => (
+              <TouchableOpacity
+                key={role}
+                onPress={() => setSelectedLoginRole(role)}
+                style={[styles.modeButton, selectedLoginRole === role && styles.modeButtonActive]}
+                activeOpacity={0.8}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: selectedLoginRole === role }}
+              >
+                <Text style={[styles.modeText, selectedLoginRole === role && styles.modeTextActive]}>
+                  {role === 'CLERK' ? 'Warranty Clerk' : 'Technician'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <Field
             label="Work Email / Username"
             icon="mail"
