@@ -648,6 +648,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     // Generate DTO with solid defaults matching backend DTO schema
     const dto = {
+      idempotencyKey: draftId,
       siteId: state.siteId,
       siteName: state.siteName,
       brandId: state.brandId || 'brand_byd',

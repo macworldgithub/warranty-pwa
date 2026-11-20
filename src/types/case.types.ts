@@ -137,6 +137,7 @@ export interface WarrantyCase {
 }
 
 export interface CreateWarrantyCaseDto {
+  idempotencyKey?: string;
   siteId: string;
   siteName: string;
   brandId: string;
