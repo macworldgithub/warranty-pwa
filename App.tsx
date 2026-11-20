@@ -233,10 +233,9 @@ function MainNavigator() {
             setCurrentScreen('ZONE_CAPTURE');
           }}
           onStartNewInspection={() => {
-            setSelectedInspectionVehicle(null);
+            startNewCase();
             setPreviousScreen('TECH_HOME');
-            // Open the inspection flow in vehicle-selection mode.
-            setCurrentScreen('ZONE_CAPTURE');
+            setCurrentScreen('WIZARD');
           }}
           onStartNewCase={() => {
             startNewCase();
