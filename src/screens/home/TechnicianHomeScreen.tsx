@@ -54,6 +54,7 @@ interface TechnicianHomeScreenProps {
   onOpenHoists?: () => void;
   onOpenProfile: () => void;
   onStartNewInspection: () => void;
+  onStartNewCase?: () => void;
   onOpenZoneCapture?: (vehicle?: any) => void;
   onOpenCase?: (caseItem: WarrantyCase) => void;
   onResolveFlag?: (caseItem: WarrantyCase) => void;
@@ -246,6 +247,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
   onOpenHoists,
   onOpenProfile,
   onStartNewInspection,
+  onStartNewCase,
   onOpenZoneCapture,
   onOpenCase,
   onResolveFlag,
@@ -732,9 +734,11 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
         onOpenTickets={onOpenTickets}
         onOpenProfile={onOpenProfile}
         actionButton={{
-          label: 'New Inspection',
-          icon: 'camera',
-          onPress: () => (onStartNewInspection ? onStartNewInspection() : onOpenZoneCapture ? onOpenZoneCapture() : undefined),
+          label: isClerk ? 'New Case' : 'New Inspection',
+          icon: isClerk ? 'plus' : 'camera',
+          onPress: isClerk
+            ? onStartNewCase || (() => onOpenTickets('all'))
+            : () => (onStartNewInspection ? onStartNewInspection() : onOpenZoneCapture ? onOpenZoneCapture() : undefined),
         }}
       />
 

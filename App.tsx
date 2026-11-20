@@ -86,6 +86,7 @@ function MainNavigator() {
 
   const isTechnicianExperience =
     user?.role === 'TECHNICIAN' ||
+    user?.role === 'CLERK' ||
     !user?.role;
 
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(
@@ -236,6 +237,11 @@ function MainNavigator() {
             setPreviousScreen('TECH_HOME');
             // Open the inspection flow in vehicle-selection mode.
             setCurrentScreen('ZONE_CAPTURE');
+          }}
+          onStartNewCase={() => {
+            startNewCase();
+            setPreviousScreen('TECH_HOME');
+            setCurrentScreen('WIZARD');
           }}
           onOpenCase={(caseItem) => {
             setSelectedCase(caseItem);

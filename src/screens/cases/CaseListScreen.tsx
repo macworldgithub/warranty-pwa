@@ -119,6 +119,7 @@ export const CaseListScreen: React.FC<CaseListScreenProps> = ({
   const clerkSiteId = activeSiteId || user?.defaultSiteId || user?.authorizedSiteIds?.[0];
   const isAdmin = user?.role === 'ADMIN' || isClerk || user?.role === 'SERVICE_MANAGER';
   const isNetworkAdmin = user?.role === 'ADMIN' || user?.role === 'SERVICE_MANAGER';
+  const canCreateCase = user?.role === 'TECHNICIAN' || isClerk || !user?.role;
 
   useEffect(() => {
     if (!isClerk && !isNetworkAdmin) return;
@@ -663,7 +664,7 @@ export const CaseListScreen: React.FC<CaseListScreenProps> = ({
                     ? 'No warranty cases match your current filter.'
                     : 'Tap below to start a new technician evidence capture ticket.'}
                 </Text>
-                {!isAdmin && (
+                {canCreateCase && (
                   <Button
                     title="Start New Case"
                     variant="primary"
