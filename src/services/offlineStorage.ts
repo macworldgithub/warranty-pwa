@@ -11,6 +11,7 @@ interface LocalDraft extends Partial<CreateWarrantyCaseDto> {
 }
 
 export interface VehicleZoneInspection {
+  inspectionId?: string;
   vin: string;
   siteId?: string;
   vehicleDetails?: { make?: string; model?: string; year?: number; powertrain?: string };

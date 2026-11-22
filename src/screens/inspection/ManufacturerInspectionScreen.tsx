@@ -1,3 +1,4 @@
+import { apiClient } from '../../api/client';
 import { missingVehiclePhotos, withVehiclePhotoRules } from '../../services/vehiclePhotos';
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
@@ -17,7 +18,8 @@ import { evidenceUploadService } from '../../services/evidenceUpload.service';
 import { colors } from '../../theme/colors';
 import { getEvidenceFileUri } from '../../utils/evidence';
 
-interface Props {
+export interface Props {
+  inspectionId?: string;
   vehicle?: RooftopVehicle | null;
   onSelectVehicle?: (vehicle: RooftopVehicle) => void;
   onBack: () => void;
@@ -32,7 +34,7 @@ interface Props {
 
 const normalizeMake = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+motor(s)?$/, '').trim();
 
-export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelectVehicle, onBack, onLogout, onCompleteInspection }) => {
+export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, inspectionId, onSelectVehicle, onBack, onLogout, onCompleteInspection }) => {
   const { user, activeSiteId } = useAuth();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [vehicles, setVehicles] = useState<RooftopVehicle[]>([]);
@@ -82,8 +84,10 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
 
   useEffect(() => {
     if (!vehicle || !pack || pack.brandId !== brandId) { setInspection(null); return; }
-    const stored = offlineStorage.getVehicleInspection(vehicle.vin);
+    const previous = offlineStorage.getVehicleInspection(vehicle.vin);
+    const stored = inspectionId && previous?.inspectionId !== inspectionId ? undefined : previous;
     const next: VehicleZoneInspection = {
+      inspectionId: inspectionId || previous?.inspectionId || crypto.randomUUID(),
       vin: vehicle.vin.toUpperCase(), roNumber: vehicle.roNumber || vehicle.inspectionNumber,
       siteId: vehicle.siteId, vehicleDetails: { make: vehicle.make, model: vehicle.model, year: vehicle.year, powertrain: vehicle.powertrain },
       capturedZoneKeys: stored?.capturedZoneKeys || [], evidenceItems: stored?.evidenceItems || [],
@@ -93,7 +97,33 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
     };
     offlineStorage.saveVehicleInspection(next);
     setInspection(next);
-  }, [vehicle, pack, brandId]);
+  }, [vehicle, pack, brandId, inspectionId]);
+
+  const [savingInspection, setSavingInspection] = useState(false);
+  const saveInspection = async (status: 'IN_PROGRESS' | 'COMPLETE') => {
+    if (!inspection || savingInspection) return;
+    setSavingInspection(true);
+    setUploadError('');
+    try {
+      const current = offlineStorage.getVehicleInspection(inspection.vin) || inspection;
+      const snapshot = { ...current, inspectionId: inspection.inspectionId, status };
+      await apiClient.post('/vehicle-inspections', { id: snapshot.inspectionId, vin: snapshot.vin, siteId: snapshot.siteId, inspection: snapshot });
+      persist(snapshot);
+      onCompleteInspection?.(vehicle!);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Unable to save inspection. Retry when online.');
+    } finally { setSavingInspection(false); }
+  };
+
+  useEffect(() => {
+    if (!inspection?.inspectionId || inspection.status === 'COMPLETE') return;
+    const snapshot = inspection;
+    const timer = setTimeout(() => {
+      void apiClient.post('/vehicle-inspections', { id: snapshot.inspectionId, vin: snapshot.vin, siteId: snapshot.siteId, inspection: snapshot })
+        .catch(() => setUploadError('Draft saved on this device. Save Inspection Draft when connected to sync its history.'));
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [inspection]);
 
   const persist = (next: VehicleZoneInspection) => { offlineStorage.saveVehicleInspection(next); setInspection(next); };
   const saveVoiceNote = (note: VoiceNote) => {
@@ -161,7 +191,8 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelec
                 const evidence = inspection.evidenceItems.find(item => item.ruleKey === photo.ruleKey);
                 return evidence?.fileUri ? <Button key={photo.ruleKey} title={`Retry ${photo.name} upload`} onPress={() => saveEvidence(evidence)} /> : null;
               })}
-              <Button title="Complete & Save Inspection" disabled={!ready} onPress={() => { if (ready && inspection) { persist({ ...inspection, status: 'COMPLETE' }); onCompleteInspection?.(vehicle); } }} />
+              <Button title="Save Inspection Draft" disabled={savingInspection} onPress={() => saveInspection('IN_PROGRESS')} />
+              <Button title="Complete & Save Inspection" disabled={!ready || savingInspection} loading={savingInspection} onPress={() => saveInspection('COMPLETE')} />
             </>}
           </>}
         </>}

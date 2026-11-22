@@ -727,7 +727,7 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
           return (
             <TouchableOpacity
               activeOpacity={0.92}
-              onPress={() => (canCaptureInspection && onOpenZoneCapture ? onOpenZoneCapture(item) : handleViewReport(item))}
+              onPress={() => onOpenZoneCapture?.(item)}
               style={styles.inspectionCard}
             >
               {/* Card Header: Year + Make + Model */}

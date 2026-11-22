@@ -44,7 +44,7 @@ import {
 import { casesApi } from './src/api';
 import { RoadTestScreen } from './src/screens/roadtest/RoadTestScreen';
 import { TechnicianHomeScreen } from './src/screens/home/TechnicianHomeScreen';
-import { ManufacturerInspectionScreen as GuidedZoneCaptureScreen } from './src/screens/inspection/ManufacturerInspectionScreen';
+import { VehicleInspectionHistoryScreen as GuidedZoneCaptureScreen } from './src/screens/inspection/VehicleInspectionHistoryScreen';
 import { HoistOverviewScreen } from './src/screens/hoist/HoistOverviewScreen';
 import { HoistInspectionScreen } from './src/screens/hoist/HoistInspectionScreen';
 import { HoistHistoryScreen } from './src/screens/hoist/HoistHistoryScreen';
