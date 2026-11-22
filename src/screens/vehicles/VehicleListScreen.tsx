@@ -836,23 +836,23 @@ export const VehicleListScreen: React.FC<VehicleListScreenProps> = ({
 
                     <TouchableOpacity
                       style={styles.btnViewReport}
-                      onPress={() => handleViewReport(item)}
+                      onPress={(event) => { event.stopPropagation(); onOpenZoneCapture?.(item); }}
                       activeOpacity={0.8}
                     >
                       <FileText size={15} color="#475569" />
-                      <Text style={styles.btnViewReportText}>View Report</Text>
+                      <Text style={styles.btnViewReportText}>View Inspections</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
                     <TouchableOpacity
                       style={[styles.btnViewReport, { flex: 1.1 }]}
-                      onPress={() => handleViewReport(item)}
+                      onPress={(event) => { event.stopPropagation(); onOpenZoneCapture?.(item); }}
                       activeOpacity={0.8}
                     >
                       <FileText size={15} color="#1E293B" />
                       <Text style={[styles.btnViewReportText, { color: '#0F172A' }]}>
-                        View Report
+                        View Inspections
                       </Text>
                     </TouchableOpacity>
 
