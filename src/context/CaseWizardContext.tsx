@@ -346,10 +346,10 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setState(prev => ({
         ...prev,
         isVinDecoding: false,
-        isVinDecoded: true,
-        make: res.make || prev.make,
-        model: res.model && !res.model.includes('Confirm') ? res.model : prev.model || 'ATTO 3',
-        year: res.year || prev.year || 2024,
+        isVinDecoded: !res.requiresManualConfirm,
+        make: res.make === 'Unknown' ? '' : res.make || '',
+        model: res.requiresManualConfirm ? '' : res.model || '',
+        year: res.year || 0,
         powertrain: res.powertrain || prev.powertrain || 'EV',
       }));
     } catch (err) {
@@ -414,6 +414,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         mediaType: item.mediaType || rule.mediaType,
         oemFileName: oemName,
         fileUri: item.fileUri,
+        aiAnalysisId: item.aiAnalysisId,
+        aiAnalysis: item.aiAnalysis,
         serverUrl: item.serverUrl,
         fileSize: item.fileSize,
         mimeType: item.mimeType || (rule.mediaType === 'video' ? 'video/mp4' : 'image/jpeg'),
@@ -721,6 +723,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 name: oemFileName,
               } as any);
               formData.append('ruleKey', ev.ruleKey);
+  if (ev.aiAnalysisId) formData.append('aiAnalysisId', ev.aiAnalysisId);
               formData.append('evidenceName', ev.ruleName || ev.ruleKey);
               if (ev.ocrExtractedText) {
                 formData.append('ocrExtractedText', ev.ocrExtractedText);

@@ -1,3 +1,4 @@
+import { EvidenceAiPanel } from './EvidenceAiPanel';
 import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from '../../services/vehiclePhotos';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -284,6 +285,8 @@ export const GuidedZoneStepper: React.FC<GuidedZoneStepperProps> = ({
             </View>
           </View>
         ) : null}
+
+        {currentEvidence && currentImageUri && <EvidenceAiPanel key={currentImageUri} evidence={currentEvidence} uri={currentImageUri} onSave={onSaveEvidence} />}
 
         {/* Action Buttons matching screenshot */}
         <View style={styles.actionButtonsRow}>

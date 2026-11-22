@@ -1,3 +1,4 @@
+import { EvidenceAiPanel } from './EvidenceAiPanel';
 import React, { useState } from 'react';
 import {
   View,
@@ -323,6 +324,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               </View>
             </View>
           </View>
+
+          {!isVideo && evidence && evidenceFileUri && <EvidenceAiPanel
+            key={evidenceFileUri}
+            evidence={evidence}
+            uri={evidenceFileUri}
+            onSave={onSaveEvidence}
+          />}
 
           {/* Action buttons when captured */}
           <View style={styles.actionRow}>

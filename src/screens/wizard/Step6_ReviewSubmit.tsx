@@ -252,6 +252,29 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
         </View>
       </Card>
 
+      <Card title="AI evidence summary">
+        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
+          {evidenceItems.filter(item => item.mediaType === 'image' && item.aiAnalysis).length} of {evidenceItems.filter(item => item.mediaType === 'image').length} attached photos analyzed
+        </Text>
+        {evidenceItems.filter(item => item.mediaType === 'image').map(item => {
+          const analysis = item.aiAnalysis;
+          const values = analysis?.reviewed || analysis?.original;
+          return <View key={item.ruleKey} style={{ borderTopWidth: 1, borderColor: colors.border, paddingVertical: 12, gap: 6 }}>
+            <Text style={{ fontWeight: '700', color: colors.textPrimary }}>{item.ruleName || item.name || item.ruleKey}</Text>
+            <Text style={{ color: colors.textSecondary }}>{analysis ? analysis.reviewed ? 'Staff reviewed' : 'AI suggestions — awaiting staff review' : 'Not analyzed'}</Text>
+            {values && <>
+              <Text style={{ color: colors.textPrimary }}>Photo quality: {values.quality || 'Unknown'}</Text>
+              <Text style={{ color: colors.textPrimary }}>Evidence view: {values.view || 'Unknown'}</Text>
+              <Text style={{ color: colors.textPrimary }}>Possible visible defects: {values.findings || 'No finding returned'}</Text>
+              {!!values.vin && <Text style={{ color: colors.textPrimary }}>VIN suggestion: {values.vin}</Text>}
+              {!!values.odometer && <Text style={{ color: colors.textPrimary }}>Odometer suggestion: {values.odometer}</Text>}
+              {!!values.notes && <Text style={{ color: colors.textPrimary }}>Notes: {values.notes}</Text>}
+            </>}
+          </View>;
+        })}
+        <Button title="Review or analyze photos" variant="outline" onPress={() => onJumpToStep(3)} />
+      </Card>
+
       {/* 4. Voice to Tech Summary */}
       <Card
         title={`Voice Notes (${voiceNotes.length})`}

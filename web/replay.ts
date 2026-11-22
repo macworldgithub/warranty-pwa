@@ -20,6 +20,7 @@ export async function evidenceForm(item: any, roNumber?: string) {
   const descriptor = item.ruleKey.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
   await appendMedia(form, 'file', { uri: item.fileUri, type: item.mediaType === 'video' ? 'video/mp4' : 'image/jpeg', name: `${(roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '')}${descriptor}.${item.mediaType === 'video' ? 'mp4' : 'jpg'}` });
   form.append('ruleKey', item.ruleKey);
+  if (item.aiAnalysisId) form.append('aiAnalysisId', item.aiAnalysisId);
   form.append('evidenceName', item.ruleName || item.ruleKey);
   if (item.ocrExtractedText) form.append('ocrExtractedText', item.ocrExtractedText);
   return form;

@@ -105,6 +105,7 @@ export const evidenceUploadService = {
             name: oemFileName,
           } as any);
           formData.append('ruleKey', evidenceItem.ruleKey);
+  if (evidenceItem.aiAnalysisId) formData.append('aiAnalysisId', evidenceItem.aiAnalysisId);
           formData.append('evidenceName', evidenceItem.ruleName || evidenceItem.ruleKey);
           if (evidenceItem.ocrExtractedText) {
             formData.append('ocrExtractedText', evidenceItem.ocrExtractedText);

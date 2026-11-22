@@ -1,3 +1,4 @@
+import { EvidenceAiPanel } from '../../components/evidence/EvidenceAiPanel';
 import React, { useState } from 'react';
 import {
   View,
@@ -272,12 +273,15 @@ export const Step1_VehicleId: React.FC<Step1Props> = ({ onNext, onPrev }) => {
             <View>
               <Text style={styles.decodedLabel}>VEHICLE SPEC</Text>
               <Text style={styles.decodedSpec}>
-                {year || 2024} {make || 'BYD'} {model || 'ATTO 3'}
+                {year || ''} {make || 'Manufacturer unknown'} {model || '— confirm model and year below'}
               </Text>
             </View>
             <Badge label={powertrain} variant="primary" size="sm" />
           </View>
 
+          <Input label="Make" value={make || ''} onChangeText={make => setVehicleInfo({ make })} placeholder="Enter vehicle make" />
+          <Input label="Model" value={model || ''} onChangeText={model => setVehicleInfo({ model })} placeholder="Enter vehicle model" />
+          <Input label="Year" value={year ? String(year) : ''} keyboardType="numeric" maxLength={4} onChangeText={text => setVehicleInfo({ year: Number(text.replace(/\D/g, '')) || 0 })} placeholder="Confirm build year" />
           <View style={styles.powertrainPicker}>
             {(['EV', 'Hybrid', 'ICE'] as PowertrainType[]).map(pt => (
               <TouchableOpacity
@@ -368,6 +372,23 @@ export const Step1_VehicleId: React.FC<Step1Props> = ({ onNext, onPrev }) => {
           </View>
         )}
       </Card>
+
+      {odoEvidence?.fileUri && <EvidenceAiPanel
+        key={odoEvidence.fileUri}
+        evidence={odoEvidence}
+        uri={odoEvidence.fileUri}
+        onSave={saveEvidenceItem}
+        onApplyOdometer={text => {
+          const match = text.trim().match(/^(\d{1,3}(?:,\d{3})+|\d+)(?:\s*(?:km|kilometres|kilometers))?$/i);
+          if (!match) {
+            Alert.alert('Check odometer reading', 'Enter the reading in kilometres using digits, then try again.');
+            return;
+          }
+          const value = Number(match[1].replace(/,/g, ''));
+          if (!Number.isSafeInteger(value) || value < 0) return;
+          setOdometer(value);
+        }}
+      />}
 
       {/* 3. Front of Vehicle Photo */}
       <Card

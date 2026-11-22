@@ -1,3 +1,4 @@
+import type { EvidenceAiResult } from '../components/evidence/EvidenceAiPanel';
 import { MediaType } from './brandPack.types';
 
 export type CaseStatus =
@@ -26,6 +27,8 @@ export interface QualityCheckResult {
 }
 
 export interface EvidenceItem {
+  aiAnalysisId?: string;
+  aiAnalysis?: EvidenceAiResult;
   id?: string;
   ruleKey: string;
   ruleName?: string;
