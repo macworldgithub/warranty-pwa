@@ -30,7 +30,7 @@ interface Props {
   onCompleteInspection?: (vehicle: RooftopVehicle) => void;
 }
 
-const normalizeMake = (value: string) => value.toLowerCase().replace(/\s+motor(s)?$/, '').trim();
+const normalizeMake = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+motor(s)?$/, '').trim();
 
 export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, onSelectVehicle, onBack, onLogout, onCompleteInspection }) => {
   const { user, activeSiteId } = useAuth();
