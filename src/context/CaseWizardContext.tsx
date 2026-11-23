@@ -1,3 +1,4 @@
+import { allowsMultipleEvidencePhotos, getEvidenceFileUri, getEvidenceFormat } from '../utils/evidence';
 import { missingVehiclePhotos } from '../services/vehiclePhotos';
 import { apiClient } from '../api/client';
 import { appendMedia, isLocalMedia, persist, serializeMedia } from '../../web/storage';
@@ -107,7 +108,7 @@ interface CaseWizardContextType extends CaseWizardState {
 
   // Evidence & Notes Actions
   saveEvidenceItem: (item: Partial<EvidenceItem> & { ruleKey: string }) => void;
-  removeEvidenceItem: (ruleKey: string) => void;
+  removeEvidenceItem: (ruleKey: string, evidenceId?: string) => void;
   getEvidenceForRule: (ruleKey: string) => EvidenceItem | undefined;
   addVoiceNote: (note: VoiceNote) => void;
   removeVoiceNote: (noteId: string) => void;
@@ -302,7 +303,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const inspection = offlineStorage.getVehicleInspection(cleanVin);
         if (inspection?.evidenceItems && inspection.evidenceItems.length > 0) {
           for (const item of inspection.evidenceItems) {
-            const exists = mergedEvidence.some(e => e.ruleKey === item.ruleKey);
+            const exists = mergedEvidence.some(e => e.ruleKey === item.ruleKey && (!allowsMultipleEvidencePhotos(item.ruleKey) || e.id === item.id));
             if (!exists) {
               mergedEvidence.push(item);
             }
@@ -406,7 +407,9 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const oemName = item.oemFileName || namingEngine.generateOemFileName(rule, prev.roNumber);
 
-      const existingIndex = prev.evidenceItems.findIndex(e => e.ruleKey === item.ruleKey);
+      const existingIndex = prev.evidenceItems.findIndex(e =>
+        e.ruleKey === item.ruleKey && (!allowsMultipleEvidencePhotos(item.ruleKey) || e.id === item.id),
+      );
       const newEvidence: EvidenceItem = {
         id: item.id || `ev_${Date.now()}_${item.ruleKey}`,
         ruleKey: item.ruleKey,
@@ -418,7 +421,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         aiAnalysis: item.aiAnalysis,
         serverUrl: item.serverUrl,
         fileSize: item.fileSize,
-        mimeType: item.mimeType || (rule.mediaType === 'video' ? 'video/mp4' : 'image/jpeg'),
+        mimeType: item.mimeType || getEvidenceFormat(item.mediaType || rule.mediaType).mime,
         capturedAt: item.capturedAt || new Date().toISOString(),
         serialNumber: item.serialNumber,
         ocrExtractedText: item.ocrExtractedText,
@@ -450,11 +453,20 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     });
   };
 
-  const removeEvidenceItem = (ruleKey: string) => {
-    setState(prev => ({
-      ...prev,
-      evidenceItems: prev.evidenceItems.filter(e => e.ruleKey !== ruleKey),
-    }));
+  const removeEvidenceItem = (ruleKey: string, evidenceId?: string) => {
+    const keepEvidence = (item: EvidenceItem) =>
+      item.ruleKey !== ruleKey || (evidenceId !== undefined && item.id !== evidenceId);
+    if (allowsMultipleEvidencePhotos(ruleKey) && state.vin) {
+      const inspection = offlineStorage.getVehicleInspection(state.vin);
+      if (inspection) {
+        const evidenceItems = inspection.evidenceItems.filter(keepEvidence);
+        const capturedZoneKeys = evidenceItems.some(item => item.ruleKey === ruleKey)
+          ? inspection.capturedZoneKeys
+          : inspection.capturedZoneKeys.filter(key => key !== ruleKey);
+        offlineStorage.saveVehicleInspection({ ...inspection, evidenceItems, capturedZoneKeys });
+      }
+    }
+    setState(prev => ({ ...prev, evidenceItems: prev.evidenceItems.filter(keepEvidence) }));
   };
 
   const getEvidenceForRule = (ruleKey: string): EvidenceItem | undefined => {
@@ -622,6 +634,11 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const submitCase = async (): Promise<WarrantyCase> => {
     const missingPhotos = missingVehiclePhotos(state.evidenceItems);
     if (missingPhotos.length) throw new Error('Required vehicle photos missing: ' + missingPhotos.map(photo => photo.name).join(', '));
+    const missingDefectPhotos = state.resolvedRules.filter(rule => allowsMultipleEvidencePhotos(rule.ruleKey) && rule.isMandatory &&
+      !state.evidenceItems.some(item => item.ruleKey === rule.ruleKey && getEvidenceFileUri(item)));
+    if (missingDefectPhotos.length > 0) {
+      throw new Error('Add at least one photo for each required section: ' + missingDefectPhotos.map(rule => rule.name).join(', '));
+    }
     const submittingUser = user?.id;
     const submittingToken = apiClient.getToken();
     const apiUrl = ENV.API_URL;
@@ -708,8 +725,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           try {
             if (isLocalMedia(ev.fileUri)) {
               const formData = new FormData();
-              const ext = ev.mediaType === 'video' ? 'mp4' : 'jpg';
-              const mime = ev.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+              const { ext, mime } = getEvidenceFormat(ev.mediaType);
               const cleanRo = (state.roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '');
               const descriptor = ev.ruleKey
                 .split('_')
@@ -723,6 +739,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                 name: oemFileName,
               } as any);
               formData.append('ruleKey', ev.ruleKey);
+              if (allowsMultipleEvidencePhotos(ev.ruleKey)) formData.append('evidenceId', ev.id);
   if (ev.aiAnalysisId) formData.append('aiAnalysisId', ev.aiAnalysisId);
               formData.append('evidenceName', ev.ruleName || ev.ruleKey);
               if (ev.ocrExtractedText) {
@@ -734,6 +751,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             } else if (ev.storageUrl && !ev.storageUrl.startsWith('file://') && !ev.storageUrl.startsWith('content://')) {
               await casesApi.addEvidence(serverCaseId, {
                 ruleKey: ev.ruleKey,
+                evidenceId: allowsMultipleEvidencePhotos(ev.ruleKey) ? ev.id : undefined,
                 name: ev.ruleName || ev.ruleKey,
                 mediaType: (ev.mediaType as any) || 'image',
                 storageUrl: ev.storageUrl,

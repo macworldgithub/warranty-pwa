@@ -41,3 +41,17 @@ it('never submits queued work without a signed-in session', async () => {
   const { offlineStorage, syncManager } = await setup(); mocks.getToken.mockReturnValue(null);
   await syncManager.syncPendingCases(); expect(mocks.createCase).not.toHaveBeenCalled(); expect(offlineStorage.getPendingUploads()).toHaveLength(1);
 });
+
+it('preserves the MIME type and extension of an offline DTC report', async () => {
+  const storage = await import('../web/storage');
+  await storage.initializeStorage();
+  const { evidenceForm } = await import('../web/replay');
+  const fileUri = await storage.saveMedia(new Blob(['%PDF-1.7'], { type: 'application/pdf' }));
+  const form = await evidenceForm({ ruleKey: 'diagnostic_evidence', mediaType: 'document', fileUri }, 'RO123');
+  const report = form.get('file') as File;
+
+  expect(form.get('ruleKey')).toBe('diagnostic_evidence');
+  expect(report.name).toBe('RO123DiagnosticEvidence.pdf');
+  expect(report.type).toBe('application/pdf');
+  expect(await report.text()).toBe('%PDF-1.7');
+});

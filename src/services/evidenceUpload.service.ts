@@ -1,3 +1,4 @@
+import { allowsMultipleEvidencePhotos, getEvidenceFormat } from '../utils/evidence';
 import { hasVehiclePhoto } from './vehiclePhotos';
 import { apiClient } from '../api/client';
 import { appendMedia, isLocalMedia, persist } from '../../web/storage';
@@ -90,8 +91,7 @@ export const evidenceUploadService = {
       if (evidenceItem.fileUri) {
         try {
           const formData = new FormData();
-          const ext = evidenceItem.mediaType === 'video' ? 'mp4' : 'jpg';
-          const mime = evidenceItem.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+          const { ext, mime } = getEvidenceFormat(evidenceItem.mediaType);
           const cleanRo = (roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '');
           const descriptor = evidenceItem.ruleKey
             .split('_')
@@ -105,6 +105,7 @@ export const evidenceUploadService = {
             name: oemFileName,
           } as any);
           formData.append('ruleKey', evidenceItem.ruleKey);
+          if (allowsMultipleEvidencePhotos(evidenceItem.ruleKey)) formData.append('evidenceId', evidenceItem.id);
   if (evidenceItem.aiAnalysisId) formData.append('aiAnalysisId', evidenceItem.aiAnalysisId);
           formData.append('evidenceName', evidenceItem.ruleName || evidenceItem.ruleKey);
           if (evidenceItem.ocrExtractedText) {
@@ -112,7 +113,7 @@ export const evidenceUploadService = {
           }
 
           uploadedCase = (await casesApi.uploadEvidenceFile(targetCaseId, formData)) as any;
-          const found = uploadedCase?.evidenceItems?.find((e) => e.ruleKey === evidenceItem.ruleKey);
+          const found = uploadedCase?.evidenceItems?.find((e) => e.ruleKey === evidenceItem.ruleKey && (!allowsMultipleEvidencePhotos(evidenceItem.ruleKey) || e.id === evidenceItem.id));
           serverStorageUrl = found?.storageUrl || (uploadedCase as any)?.url || (uploadedCase as any)?.storageUrl;
         } catch (uploadErr) {
           console.warn('[EvidenceUpload] uploadEvidenceFile failed, falling back to addEvidence:', uploadErr);
@@ -124,6 +125,7 @@ export const evidenceUploadService = {
         try {
           const fallbackRes = await casesApi.addEvidence(targetCaseId, {
             ruleKey: evidenceItem.ruleKey,
+            evidenceId: allowsMultipleEvidencePhotos(evidenceItem.ruleKey) ? evidenceItem.id : undefined,
             name: evidenceItem.ruleName || evidenceItem.ruleKey,
             mediaType: evidenceItem.mediaType || 'image',
             storageUrl: evidenceItem.storageUrl || evidenceItem.fileUri || '',
@@ -132,7 +134,7 @@ export const evidenceUploadService = {
             durationSeconds: evidenceItem.durationSeconds,
           });
           uploadedCase = fallbackRes;
-          const found = fallbackRes?.evidenceItems?.find((e) => e.ruleKey === evidenceItem.ruleKey);
+          const found = fallbackRes?.evidenceItems?.find((e) => e.ruleKey === evidenceItem.ruleKey && (!allowsMultipleEvidencePhotos(evidenceItem.ruleKey) || e.id === evidenceItem.id));
           serverStorageUrl = found?.storageUrl || evidenceItem.storageUrl || evidenceItem.fileUri;
         } catch (addErr) {
           console.warn('[EvidenceUpload] addEvidence fallback failed:', addErr);
@@ -143,7 +145,7 @@ export const evidenceUploadService = {
 
       // 4. Update local offlineStorage with server URL if available
       checkSession();
-      if (serverStorageUrl && cleanVin) {
+      if (serverStorageUrl && cleanVin && !allowsMultipleEvidencePhotos(evidenceItem.ruleKey)) {
         const updatedItem = {
           ...evidenceItem,
           storageUrl: serverStorageUrl,

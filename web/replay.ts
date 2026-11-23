@@ -1,3 +1,4 @@
+import { allowsMultipleEvidencePhotos, getEvidenceFormat } from '../src/utils/evidence';
 import type { WarrantyCase, CreateWarrantyCaseDto } from '../src/types';
 import type { VehicleZoneInspection } from '../src/services/offlineStorage';
 import { appendMedia, isLocalMedia, serializeMedia } from './storage';
@@ -18,8 +19,10 @@ export function caseFields(item: Partial<WarrantyCase>): Partial<CreateWarrantyC
 export async function evidenceForm(item: any, roNumber?: string) {
   const form = new FormData();
   const descriptor = item.ruleKey.split('_').map((word: string) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
-  await appendMedia(form, 'file', { uri: item.fileUri, type: item.mediaType === 'video' ? 'video/mp4' : 'image/jpeg', name: `${(roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '')}${descriptor}.${item.mediaType === 'video' ? 'mp4' : 'jpg'}` });
+  const { ext, mime } = getEvidenceFormat(item.mediaType || 'image');
+  await appendMedia(form, 'file', { uri: item.fileUri, type: mime, name: `${(roNumber || 'RO').replace(/[^a-zA-Z0-9]/g, '')}${descriptor}.${ext}` });
   form.append('ruleKey', item.ruleKey);
+  if (allowsMultipleEvidencePhotos(item.ruleKey) && item.id) form.append('evidenceId', item.id);
   if (item.aiAnalysisId) form.append('aiAnalysisId', item.aiAnalysisId);
   form.append('evidenceName', item.ruleName || item.ruleKey);
   if (item.ocrExtractedText) form.append('ocrExtractedText', item.ocrExtractedText);
@@ -51,7 +54,7 @@ export async function replayCase(item: WarrantyCase, api: ReplayApi, apiUrl: str
     if (isLocalMedia(evidence.fileUri)) {
       await api.uploadEvidenceFile(item.id, await evidenceForm(evidence, item.roNumber));
     } else if (evidence.storageUrl && !isLocalMedia(evidence.storageUrl)) {
-      await api.addEvidence(item.id, { ...evidence, name: evidence.ruleName || evidence.ruleKey });
+      await api.addEvidence(item.id, { ...evidence, evidenceId: allowsMultipleEvidencePhotos(evidence.ruleKey) ? evidence.id : undefined, name: evidence.ruleName || evidence.ruleKey });
     } else continue;
     evidence.isUploaded = true;
     await checkpoint();
@@ -73,7 +76,7 @@ export async function replayInspection(inspection: VehicleZoneInspection & { ser
   for (const evidence of inspection.evidenceItems.filter(item => isLocalMedia(item.fileUri) && !item.isUploaded)) {
     await requireSession();
     const uploaded = await api.uploadEvidenceFile(inspection.serverCaseId, await evidenceForm(evidence, inspection.roNumber));
-    evidence.storageUrl = uploaded?.url || uploaded?.storageUrl || uploaded?.evidenceItems?.find((item: any) => item.ruleKey === evidence.ruleKey)?.storageUrl;
+    evidence.storageUrl = uploaded?.url || uploaded?.storageUrl || uploaded?.evidenceItems?.find((item: any) => item.ruleKey === evidence.ruleKey && (!allowsMultipleEvidencePhotos(evidence.ruleKey) || item.id === evidence.id))?.storageUrl;
     evidence.isUploaded = true; await checkpoint();
   }
   if (inspection.voiceNotes?.length && !inspection.voiceNotesSynced) {

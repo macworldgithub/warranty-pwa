@@ -1,3 +1,4 @@
+import { allowsMultipleEvidencePhotos } from '../utils/evidence';
 import { missingVehiclePhotos } from './vehiclePhotos';
 import { PersistentMap, persist } from '../../web/storage';
 import { requestBackgroundSync } from '../../web/outbox';
@@ -223,7 +224,7 @@ class OfflineStorageService {
       existing.capturedZoneKeys.push(zoneKey);
     }
 
-    const idx = existing.evidenceItems.findIndex((e) => e.ruleKey === zoneKey);
+    const idx = existing.evidenceItems.findIndex((e) => e.ruleKey === zoneKey && (!allowsMultipleEvidencePhotos(zoneKey) || e.id === evidenceItem.id));
     if (idx >= 0) {
       existing.evidenceItems[idx] = evidenceItem;
     } else {

@@ -1,3 +1,4 @@
+import { saveMedia } from '../../web/storage';
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import { launchCamera, launchImageLibrary, CameraOptions, ImageLibraryOptions } from 'react-native-image-picker';
 
@@ -33,6 +34,28 @@ export async function requestCameraPermission(): Promise<boolean> {
 }
 
 export const cameraService = {
+  pickPdf: (): Promise<CaptureMediaResult> => new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,.pdf';
+    input.oncancel = () => resolve({ success: false, error: 'User cancelled' });
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return resolve({ success: false, error: 'User cancelled' });
+      try {
+        if (await file.slice(0, 5).text() !== '%PDF-') {
+          return resolve({ success: false, error: 'Select a valid PDF report.' });
+        }
+        const mimeType = 'application/pdf';
+        const fileUri = await saveMedia(file.slice(0, file.size, mimeType));
+        resolve({ success: true, fileUri, fileSize: file.size, mimeType });
+      } catch {
+        resolve({ success: false, error: 'Unable to read the PDF report.' });
+      }
+    };
+    input.click();
+  }),
+
   /**
    * Opens the hardware camera directly to capture a photo.
    */

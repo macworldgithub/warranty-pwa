@@ -1,3 +1,4 @@
+import { resolveMedia } from '../../../web/storage';
 import { EvidenceAiPanel } from './EvidenceAiPanel';
 import React, { useState } from 'react';
 import {
@@ -24,14 +25,16 @@ import { VoiceToTechButton } from '../voice/VoiceToTechButton';
 import { cameraService } from '../../services/cameraService';
 import { getBaseServerUrl } from '../../config/env';
 import { recognizeEvidence } from '../../../web/ocr';
-import { getEvidenceFileUri } from '../../utils/evidence';
+import { allowsMultipleEvidencePhotos, getEvidenceFileUri } from '../../utils/evidence';
 
 interface EvidenceCardProps {
   rule: BrandPackRule;
   evidence?: EvidenceItem;
   roNumber: string;
   onSaveEvidence: (item: Partial<EvidenceItem> & { ruleKey: string }) => void;
-  onRemoveEvidence: (ruleKey: string) => void;
+  onRemoveEvidence: (ruleKey: string, evidenceId?: string) => void;
+  photoLabel?: string;
+  addingPhoto?: boolean;
   onAddVoiceNote: (note: VoiceNote) => void;
   isFlagged?: boolean;
   flagInstruction?: string;
@@ -46,6 +49,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
   onAddVoiceNote,
   isFlagged = false,
   flagInstruction,
+  photoLabel,
+  addingPhoto,
 }) => {
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -69,6 +74,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         : rawImageUri
     : null;
 
+  const prefersPdf = rule.ruleKey === 'diagnostic_evidence';
+  const isDocument = evidence?.mediaType === 'document';
   const isCaptured = Boolean(evidenceFileUri);
   const isVideo =
     rule.mediaType === 'video' ||
@@ -93,11 +100,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
     });
   };
 
-  const handleCapture = async (fromGallery: boolean = false) => {
+  const handleCapture = async (source: boolean | 'pdf' = false) => {
     setIsCapturing(true);
     try {
       let res;
-      if (fromGallery) {
+      if (source === 'pdf') {
+        res = await cameraService.pickPdf();
+      } else if (source) {
         res = await cameraService.pickFromGallery(isVideo);
       } else if (isVideo) {
         res = await cameraService.captureVideo(rule.ruleKey);
@@ -108,11 +117,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
       if (!res.success && res.error && !/cancel/i.test(res.error)) Alert.alert('Capture Failed', res.error);
 
       if (res.success && res.fileUri) {
-        const ocrText = isVideo ? undefined : await recognizeEvidence(res.fileUri, rule.ruleKey);
+        const ocrText = isVideo || source === 'pdf' ? undefined : await recognizeEvidence(res.fileUri, rule.ruleKey);
         onSaveEvidence({
+          ...(allowsMultipleEvidencePhotos(rule.ruleKey) ? { id: evidence?.id || crypto.randomUUID() } : {}),
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
-          mediaType: rule.mediaType,
+          mediaType: source === 'pdf' ? 'document' : prefersPdf ? 'image' : rule.mediaType,
+          mimeType: res.mimeType,
           fileUri: res.fileUri,
           fileSize: res.fileSize || (isVideo ? 5200000 : 1850000),
           durationSeconds: res.durationSeconds,
@@ -146,19 +157,19 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             ]}
           >
             <Icon
-              name={isCaptured ? 'check' : isVideo ? 'video' : 'camera'}
+              name={isCaptured ? 'check' : prefersPdf ? 'file-text' : isVideo ? 'video' : 'camera'}
               size={18}
               color={isCaptured ? colors.success : colors.primaryLight}
             />
           </View>
           <View style={styles.titleArea}>
-            <Text style={styles.ruleTitle}>{rule.name}</Text>
+            <Text style={styles.ruleTitle}>{photoLabel || rule.name}</Text>
           </View>
         </View>
 
         <View style={styles.headerRight}>
           <Badge
-            label={isCaptured ? 'Captured ✓' : rule.isMandatory ? 'Required' : 'Optional'}
+            label={addingPhoto ? 'Additional' : isCaptured ? 'Captured ✓' : rule.isMandatory ? 'Required' : 'Optional'}
             variant={isCaptured ? 'success' : 'neutral'}
             size="sm"
           />
@@ -179,14 +190,14 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
       )}
 
       {/* Guidance Text */}
-      {rule.guidanceText && (
+      {(prefersPdf || rule.guidanceText) && !photoLabel && (
         <Text style={styles.guidanceText}>
-          {rule.guidanceText}
+          {prefersPdf ? 'Upload the PDF report with the DTC codes, system status and freeze-frame data. You can upload a photo if a PDF is unavailable.' : rule.guidanceText}
         </Text>
       )}
 
       {/* Sample Reference Preview */}
-      {rule.exampleImageUrl ? (
+      {rule.exampleImageUrl && !photoLabel ? (
         <View style={styles.sampleGuideContainer}>
           <TouchableOpacity
             style={styles.sampleGuideHeader}
@@ -245,7 +256,10 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
       {isCaptured ? (
         <View style={styles.previewContainer}>
           <View style={[styles.previewMediaBox, isCompactLayout && styles.previewMediaBoxCompact]}>
-            {isVideo ? (
+            {isDocument && imageUri ? (
+              <Button title="Open PDF" variant="outline" size="sm"
+                onPress={() => void Linking.openURL(resolveMedia(imageUri))} />
+            ) : isVideo ? (
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={() => {
@@ -325,7 +339,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             </View>
           </View>
 
-          {!isVideo && evidence && evidenceFileUri && <EvidenceAiPanel
+          {!isDocument && !isVideo && evidence && evidenceFileUri && <EvidenceAiPanel
             key={evidenceFileUri}
             evidence={evidence}
             uri={evidenceFileUri}
@@ -335,12 +349,12 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
           {/* Action buttons when captured */}
           <View style={styles.actionRow}>
             <Button
-              title="Retake"
+              title={prefersPdf ? "Replace with PDF" : "Retake"}
               variant="outline"
               size="sm"
               loading={isCapturing}
               leftIcon={<Icon name="refresh" size={14} color={colors.primaryLight} />}
-              onPress={() => handleCapture(false)}
+              onPress={() => handleCapture(prefersPdf ? 'pdf' : false)}
               style={{ flex: 1 }}
             />
             <Button
@@ -351,13 +365,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               onPress={() => setShowVoiceRecorder(!showVoiceRecorder)}
               style={{ flex: 1 }}
             />
-            <TouchableOpacity
+            {(!allowsMultipleEvidencePhotos(rule.ruleKey) || !evidence?.isUploaded) && <TouchableOpacity
               activeOpacity={0.7}
-              onPress={() => onRemoveEvidence(rule.ruleKey)}
+              onPress={() => onRemoveEvidence(rule.ruleKey, allowsMultipleEvidencePhotos(rule.ruleKey) ? evidence?.id : undefined)}
               style={styles.deleteBtn}
             >
               <Icon name="trash" size={16} color={colors.danger} />
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         </View>
       ) : (
@@ -365,13 +379,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         <View style={styles.unopenedContainer}>
           <View style={styles.captureBtnRow}>
             <Button
-              title={isVideo ? 'Record Video (.mp4)' : 'Capture Photo'}
+              title={prefersPdf ? 'Upload PDF' : isVideo ? 'Record Video (.mp4)' : addingPhoto ? 'Add Photo' : 'Capture Photo'}
               variant={rule.isMandatory ? 'primary' : 'secondary'}
               size="md"
               loading={isCapturing}
               leftIcon={
                 <Icon
-                  name={isVideo ? 'video' : 'camera'}
+                  name={prefersPdf ? 'file-text' : isVideo ? 'video' : 'camera'}
                   size={18}
                   color={colors.textPrimary}
                 />
@@ -381,6 +395,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
             />
             <TouchableOpacity
               activeOpacity={0.7}
+              disabled={isCapturing}
+              accessibilityLabel={prefersPdf ? "Upload photo" : "Upload photo or video"}
               onPress={() => handleCapture(true)}
               style={styles.galleryBtn}
             >
@@ -460,6 +476,31 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
           ) : null}
         </View>
       </Modal>
+    </View>
+  );
+};
+
+export const EvidenceRuleCard: React.FC<EvidenceCardProps & { evidenceItems: EvidenceItem[] }> = ({
+  evidenceItems,
+  ...props
+}) => {
+  if (!allowsMultipleEvidencePhotos(props.rule.ruleKey)) return <EvidenceCard {...props} />;
+
+  const photos = evidenceItems.filter(item => item.ruleKey === props.rule.ruleKey && getEvidenceFileUri(item));
+  if (!photos.length) return <EvidenceCard {...props} />;
+
+  return (
+    <View>
+      {photos.map((photo, index) => (
+        <EvidenceCard
+          {...props}
+          key={photo.id}
+          evidence={photo}
+          photoLabel={index === 0 ? undefined : `Photo ${index + 1}`}
+          isFlagged={index === 0 && props.isFlagged}
+        />
+      ))}
+      <EvidenceCard {...props} evidence={undefined} photoLabel={`Add another ${props.rule.ruleKey === 'fault_location' ? 'location photo' : 'close-up'}`} addingPhoto isFlagged={false} />
     </View>
   );
 };

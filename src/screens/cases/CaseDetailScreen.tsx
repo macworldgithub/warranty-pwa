@@ -1,4 +1,6 @@
+import { resolveMedia } from '../../../web/storage';
 import React, { useState, useEffect, useMemo } from 'react';
+import { allowsMultipleEvidencePhotos } from '../../utils/evidence';
 import {
   View,
   Text,
@@ -160,17 +162,22 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
   // Merged evidence list: combines server case evidence items with offline inspection captures
   const allEvidenceItems: EvidenceItem[] = useMemo(() => {
     const itemsMap = new Map<string, EvidenceItem>();
+    const evidenceKey = (item: EvidenceItem, fallback: string) => {
+      if (!allowsMultipleEvidencePhotos(item.ruleKey)) return item.ruleKey || item.id;
+      const photoId = item.id || getEvidenceUri(item) || fallback;
+      return `${item.ruleKey}:${photoId}`;
+    };
 
     // 1. Add server/case evidence items first
-    (currentCase.evidenceItems || []).forEach((item) => {
-      const key = item.ruleKey || item.id;
+    (currentCase.evidenceItems || []).forEach((item, index) => {
+      const key = evidenceKey(item, 'case-' + index);
       if (key) itemsMap.set(key, item);
     });
 
     // 2. Merge local inspection items from offlineStorage (e.g. from Guided Zone Capture)
     if (localInspection?.evidenceItems) {
-      localInspection.evidenceItems.forEach((localEv) => {
-        const key = localEv.ruleKey || localEv.id;
+      localInspection.evidenceItems.forEach((localEv, index) => {
+        const key = evidenceKey(localEv, 'inspection-' + index);
         if (!key) return;
         if (!itemsMap.has(key)) {
           itemsMap.set(key, localEv);
@@ -196,7 +203,7 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
     );
     if (front) return getEvidenceUri(front);
     const anyImg = allEvidenceItems.find(
-      (e) => e.mediaType !== 'video' && getEvidenceUri(e)
+      (e) => e.mediaType === 'image' && getEvidenceUri(e)
     );
     return anyImg ? getEvidenceUri(anyImg) : null;
   }, [allEvidenceItems]);
@@ -585,7 +592,7 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
                 const isVideo = ev.mediaType === 'video';
 
                 return (
-                  <View key={ev.id || `${ev.ruleKey}-${idx}`} style={styles.evidenceCardContainer}>
+                  <View key={`${ev.ruleKey}-${ev.id || idx}`} style={styles.evidenceCardContainer}>
                     {/* Header with Title and Verification Status */}
                     <View style={styles.evidenceCardHeader}>
                       <View style={styles.evidenceHeaderLeft}>
@@ -631,7 +638,10 @@ export const CaseDetailScreen: React.FC<CaseDetailScreenProps> = ({
                     </View>
 
                     {/* Image / Video Media Preview */}
-                    {isVideo ? (
+                    {ev.mediaType === 'document' && imgUri ? (
+                      <Button title="Open PDF" variant="outline" size="sm"
+                        onPress={() => void Linking.openURL(resolveMedia(imgUri))} />
+                    ) : isVideo ? (
                       <View style={styles.videoCardWrapper}>
                         <View style={styles.videoCardHeader}>
                           <View style={styles.videoBadge}>

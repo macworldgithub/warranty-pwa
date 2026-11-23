@@ -1,5 +1,6 @@
 import { VEHICLE_PHOTO_CATEGORIES, missingVehiclePhotos } from '../../services/vehiclePhotos';
 import React from 'react';
+import { allowsMultipleEvidencePhotos, getEvidenceFileUri } from '../../utils/evidence';
 import {
   View,
   Text,
@@ -14,7 +15,7 @@ import { Icon } from '../../components/common/Icon';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { Card } from '../../components/common/Card';
-import { EvidenceCard } from '../../components/evidence/EvidenceCard';
+import { EvidenceRuleCard } from '../../components/evidence/EvidenceCard';
 import { ManufacturerBulletins } from '../../components/evidence/ManufacturerBulletins';
 import { GuidedZoneStepper } from '../../components/evidence/GuidedZoneStepper';
 import { useCaseWizard } from '../../context/CaseWizardContext';
@@ -50,13 +51,8 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
       !VEHICLE_PHOTO_CATEGORIES.some(category => category.ruleKey === r.ruleKey)
   );
 
-  // Check how many mandatory Tier 1 items are completed
-  const mandatoryTier1 = tier1Rules.filter(r => r.isMandatory);
-  const completedTier1 = mandatoryTier1.filter(r => {
-    const ev = getEvidenceForRule(r.ruleKey);
-    return !!ev?.fileUri || !!ev?.serverUrl;
-  });
-
+  const missingDefectPhotos = tier1Rules.filter(rule => allowsMultipleEvidencePhotos(rule.ruleKey) && rule.isMandatory &&
+    !evidenceItems.some(item => item.ruleKey === rule.ruleKey && getEvidenceFileUri(item)));
   const missingPhotos = missingVehiclePhotos(evidenceItems);
 
   return (
@@ -120,10 +116,11 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         const isFlagged = isFlaggedMode && flaggedRuleKeys.includes(rule.ruleKey);
 
         return (
-          <EvidenceCard
+          <EvidenceRuleCard
             key={rule.id || rule.ruleKey}
             rule={rule}
             evidence={evidence}
+            evidenceItems={evidenceItems}
             roNumber={roNumber}
             isFlagged={isFlagged}
             onSaveEvidence={saveEvidenceItem}
@@ -145,6 +142,7 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
       {missingPhotos.length > 0 && <Text style={styles.sectionDesc}>
         Required photos still needed: {missingPhotos.map(photo => photo.name).join(', ')}. MODIFICATIONS is optional.
       </Text>}
+      {missingDefectPhotos.length > 0 && <Text style={styles.sectionDesc}>Add at least one photo for each required section: {missingDefectPhotos.map(rule => rule.name).join(', ')}.</Text>}
       {/* Nav Row */}
       <View style={styles.navRow}>
         <Button
@@ -157,7 +155,7 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
         <Button
           title="Component Photos"
           variant="primary"
-          disabled={missingPhotos.length > 0 || isLoadingRules}
+          disabled={missingDefectPhotos.length > 0 || missingPhotos.length > 0 || isLoadingRules}
           onPress={onNext}
           rightIcon={<Icon name="chevron-right" size={18} color={colors.textInverse} />}
           style={{ flex: 2 }}

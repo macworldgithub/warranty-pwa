@@ -5,6 +5,7 @@ const savedApiHost = localStorage.getItem('booran-api-host')?.replace(/\/+$/, ''
 // Migrate saved frontend and retired LAN addresses to the deployed backend.
 export const DEFAULT_API_HOST = savedApiHost
   && savedApiHost !== window.location.origin
+  && (window.location.protocol !== 'https:' || savedApiHost.startsWith('https://'))
   && savedApiHost !== 'http://192.168.100.33:4000'
   ? savedApiHost
   : configuredApiHost;

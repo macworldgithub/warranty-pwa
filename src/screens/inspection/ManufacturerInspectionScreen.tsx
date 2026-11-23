@@ -1,10 +1,10 @@
 import { apiClient } from '../../api/client';
 import { missingVehiclePhotos, withVehiclePhotoRules } from '../../services/vehiclePhotos';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Header } from '../../components/common/Header';
 import { Button } from '../../components/common/Button';
-import { EvidenceCard } from '../../components/evidence/EvidenceCard';
+import { EvidenceRuleCard } from '../../components/evidence/EvidenceCard';
 import { ManufacturerBulletins } from '../../components/evidence/ManufacturerBulletins';
 import { brandsApi } from '../../api/brands.api';
 import { brandPacksApi } from '../../api/brandPacks.api';
@@ -16,7 +16,7 @@ import { offlineStorage, VehicleZoneInspection } from '../../services/offlineSto
 import { namingEngine } from '../../services/namingEngine';
 import { evidenceUploadService } from '../../services/evidenceUpload.service';
 import { colors } from '../../theme/colors';
-import { getEvidenceFileUri } from '../../utils/evidence';
+import { allowsMultipleEvidencePhotos, getEvidenceFileUri } from '../../utils/evidence';
 
 export interface Props {
   inspectionId?: string;
@@ -125,6 +125,7 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, inspect
     return () => clearTimeout(timer);
   }, [inspection]);
 
+  const uploadQueue = useRef(Promise.resolve());
   const persist = (next: VehicleZoneInspection) => { offlineStorage.saveVehicleInspection(next); setInspection(next); };
   const saveVoiceNote = (note: VoiceNote) => {
     if (inspection) persist({ ...inspection, voiceNotes: [...(inspection.voiceNotes || []), note], voiceNotesSynced: false });
@@ -138,16 +139,25 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, inspect
     if (!rule) return;
     const evidence: EvidenceItem = {
       ...item, storageUrl: undefined, serverUrl: undefined, isUploaded: false, id: item.id || `ev_${Date.now()}_${rule.ruleKey}`, ruleKey: rule.ruleKey,
-      ruleName: rule.name, mediaType: rule.mediaType, isMandatory: rule.isMandatory,
+      ruleName: rule.name, mediaType: item.mediaType || rule.mediaType, isMandatory: rule.isMandatory,
       tier: rule.tier, oemFileName: namingEngine.generateOemFileName(rule, inspection.roNumber || 'RO'),
     };
-    const next = { ...latest, evidenceItems: [...latest.evidenceItems.filter(entry => entry.ruleKey !== rule.ruleKey), evidence], capturedZoneKeys: [...new Set([...latest.capturedZoneKeys, rule.ruleKey])] };
+    const evidenceItems = [...latest.evidenceItems];
+    const existingIndex = evidenceItems.findIndex(entry =>
+      entry.ruleKey === rule.ruleKey && (!allowsMultipleEvidencePhotos(rule.ruleKey) || entry.id === evidence.id),
+    );
+    if (existingIndex < 0) evidenceItems.push(evidence);
+    else evidenceItems[existingIndex] = evidence;
+    const next = { ...latest, evidenceItems, capturedZoneKeys: [...new Set([...latest.capturedZoneKeys, rule.ruleKey])] };
     persist(next);
-    void evidenceUploadService.uploadEvidenceToServer({ vin: inspection.vin, roNumber: inspection.roNumber, evidenceItem: evidence, vehicleDetails: vehicle, technicianId: user?.id, technicianName: user?.name, brandId: pack.brandId, siteId: vehicle.siteId, brandPackId: pack.id, brandPackVersion: pack.version }).then(result => {
+    uploadQueue.current = uploadQueue.current.then(async () => {
+      const pending = offlineStorage.getVehicleInspection(inspection.vin);
+      if (!pending?.evidenceItems.some(entry => entry.id === evidence.id && entry.fileUri === evidence.fileUri)) return;
+      const result = await evidenceUploadService.uploadEvidenceToServer({ vin: inspection.vin, roNumber: inspection.roNumber, evidenceItem: evidence, vehicleDetails: vehicle, technicianId: user?.id, technicianName: user?.name, brandId: pack.brandId, siteId: vehicle.siteId, brandPackId: pack.id, brandPackVersion: pack.version });
       if (!result.success || !result.storageUrl) { setUploadError('Photo saved on this device. Reconnect and retry its upload before completing.'); return; }
       const latest = offlineStorage.getVehicleInspection(inspection.vin);
       if (!latest || latest.brandPackId !== pack.id || latest.brandPackVersion !== pack.version) return;
-      const updated = { ...latest, evidenceItems: latest.evidenceItems.map(entry => entry.id === evidence.id ? { ...entry, storageUrl: result.storageUrl, isUploaded: true } : entry) };
+      const updated = { ...latest, evidenceItems: latest.evidenceItems.map(entry => entry.id === evidence.id && entry.fileUri === evidence.fileUri ? { ...entry, storageUrl: result.storageUrl, isUploaded: true } : entry) };
       offlineStorage.saveVehicleInspection(updated);
       setInspection(current => current?.vin === updated.vin ? updated : current);
     });
@@ -155,7 +165,8 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, inspect
   const evidenceForRule = (key: string) => inspection?.evidenceItems.find(item => item.ruleKey === key);
   const missingRequiredRules = pack?.rules.filter(rule => rule.isMandatory && !getEvidenceFileUri(evidenceForRule(rule.ruleKey))) ?? [];
   const missingPhotoUploads = missingVehiclePhotos(inspection?.evidenceItems || [], true);
-  const ready = Boolean(missingPhotoUploads.length === 0 && inspection && pack?.rules.length && missingRequiredRules.length === 0);
+  const pendingDefectPhotos = inspection?.evidenceItems.filter(item => allowsMultipleEvidencePhotos(item.ruleKey) && !item.isUploaded && !item.storageUrl && !item.serverUrl) ?? [];
+  const ready = Boolean(pendingDefectPhotos.length === 0 && missingPhotoUploads.length === 0 && inspection && pack?.rules.length && missingRequiredRules.length === 0);
 
   return <View style={styles.container}>
     <Header title={vehicle ? 'Manufacturer Evidence Capture' : 'New Inspection'} onBack={onBack} onLogout={onLogout} showBrandLogo={false} />
@@ -180,9 +191,16 @@ export const ManufacturerInspectionScreen: React.FC<Props> = ({ vehicle, inspect
             </> : <>
               <Text style={styles.description}>{vehicle.make} {vehicle.model} · {vehicle.vin}</Text>
               {pack.rules.length === 0 && <Text>No evidence requirements have been configured for this manufacturer.</Text>}
-              {inspection && pack.rules.map(rule => <EvidenceCard key={`${pack.id}_${rule.ruleKey}`} rule={rule} evidence={evidenceForRule(rule.ruleKey)} roNumber={inspection.roNumber || 'RO'} onSaveEvidence={saveEvidence} onRemoveEvidence={key => persist({ ...inspection, evidenceItems: inspection.evidenceItems.filter(item => item.ruleKey !== key), capturedZoneKeys: inspection.capturedZoneKeys.filter(item => item !== key), status: 'IN_PROGRESS' })} onAddVoiceNote={saveVoiceNote} />)}
+              {inspection && pack.rules.map(rule => <EvidenceRuleCard evidenceItems={inspection.evidenceItems} key={`${pack.id}_${rule.ruleKey}`} rule={rule} evidence={evidenceForRule(rule.ruleKey)} roNumber={inspection.roNumber || 'RO'} onSaveEvidence={saveEvidence} onRemoveEvidence={(key, id) => {
+                const evidenceItems = inspection.evidenceItems.filter(item => item.ruleKey !== key || (id && item.id !== id));
+                const capturedZoneKeys = evidenceItems.some(item => item.ruleKey === key)
+                  ? inspection.capturedZoneKeys
+                  : inspection.capturedZoneKeys.filter(item => item !== key);
+                persist({ ...inspection, evidenceItems, capturedZoneKeys, status: 'IN_PROGRESS' });
+              }} onAddVoiceNote={saveVoiceNote} />)}
               {inspection?.voiceNotes?.map(note => <Text key={note.id} style={styles.card}>{note.transcript}</Text>)}
               {inspection && missingRequiredRules.length > 0 && <Text style={styles.description} accessibilityLiveRegion="polite">Required evidence still missing: {missingRequiredRules.map(rule => rule.name).join(', ')}</Text>}
+              {pendingDefectPhotos.length > 0 && <Text style={styles.description}>Defect photos awaiting upload: {pendingDefectPhotos.length}. Use Retake to replace a photo if its upload failed.</Text>}
               {!!uploadError && <Text style={styles.description} accessibilityRole="alert">{uploadError}</Text>}
               {inspection && missingPhotoUploads.length > 0 && <Text style={styles.description}>
                 Required photo uploads remaining: {missingPhotoUploads.map(photo => photo.name).join(', ')}. MODIFICATIONS is optional.
