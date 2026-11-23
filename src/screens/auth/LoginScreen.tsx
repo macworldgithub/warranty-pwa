@@ -231,7 +231,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       const authenticatedUser = await login(signInEmail.trim().toLowerCase(), signInPassword);
       if (authenticatedUser.role !== selectedLoginRole) {
         await logout();
-        setAuthError(`This account is registered as ${authenticatedUser.role === 'CLERK' ? 'a Clerk' : 'a Technician'}. Select the matching sign-in role.`);
+        const role = authenticatedUser.role;
+        if (role === 'ADMIN') {
+          setAuthError('This is an Admin account. Please sign in through the Admin Portal.');
+        } else if (role === 'CLERK' || role === 'TECHNICIAN') {
+          setAuthError(`This account is registered as ${role === 'CLERK' ? 'a Warranty Clerk' : 'a Technician'}. Select the matching sign-in role.`);
+        } else {
+          setAuthError('This account role cannot sign in through the Technician or Warranty Clerk options. Please use the appropriate portal.');
+        }
         return;
       }
       onLoginSuccess();
