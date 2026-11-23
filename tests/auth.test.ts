@@ -13,6 +13,12 @@ it('sends an employee number as text without requiring an email', async () => {
   expect(client.post).toHaveBeenCalledWith('/auth/signup', expect.objectContaining({ username: '001234', role: 'TECHNICIAN', siteId: 'site_a' }));
   expect(client.post.mock.calls[0][1]).not.toHaveProperty('email');
 });
+it('sends every selected rooftop during PIN registration', async () => {
+  const authorizedSiteIds = ['site_a', 'site_b', 'site_c'];
+  client.post.mockResolvedValue({ accessToken: 'test-session', user: { id: 'usr_test', username: '001234', role: 'TECHNICIAN', defaultSiteId: 'site_a', authorizedSiteIds } });
+  await expect(authApi.registerTechnician({ name: 'Test', username: '001234', password: 'test-password', workshopPin: '0000', defaultSiteId: 'site_a', authorizedSiteIds })).resolves.toMatchObject({ user: { authorizedSiteIds } });
+  expect(client.post).toHaveBeenCalledWith('/auth/signup', expect.objectContaining({ siteId: 'site_a', authorizedSiteIds }));
+});
 it('does not report delivery of a password-reset OTP when the backend is unavailable', async () => {
   await expect(authApi.sendForgotPasswordOtp('test@example.com')).rejects.toThrow('Backend unavailable');
 });

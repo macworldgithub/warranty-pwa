@@ -98,7 +98,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
   const [signUpUsername, setSignUpUsername] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
-  const [primarySiteId, setPrimarySiteId] = useState<string>('site_cranbourne_byd');
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>(['site_cranbourne_byd']);
+  const primarySiteId = selectedSiteIds[0];
 
   // Sign In Form Fields
   const [signInEmail, setSignInEmail] = useState('');
@@ -127,7 +128,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         const activeSites = (sites || []).filter((site) => site.isActive !== false);
         if (activeSites.length > 0) {
           setRooftopOptions(activeSites);
-          setPrimarySiteId(activeSites[0].id);
+          setSelectedSiteIds([activeSites[0].id]);
         }
       })
       .catch((err) => {
@@ -194,7 +195,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       return;
     }
     if (!primarySiteId) {
-      setAuthError('Please select your primary dealership site.');
+      setAuthError('Please select at least one dealership site.');
       return;
     }
 
@@ -205,6 +206,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
         username: signUpUsername.trim().toLowerCase(),
         password: signUpPassword,
         defaultSiteId: primarySiteId,
+        authorizedSiteIds: selectedSiteIds,
       });
 
       onLoginSuccess();
@@ -288,7 +290,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           {activeTab === 'PIN_SETUP'
             ? pinStep === 1
               ? 'Enter your workshop access PIN to activate your device'
-              : 'Set your username, password, and primary workshop'
+              : 'Set your username, password, and workshop access'
             : 'Sign in to access warranty tickets and evidence capture.'}
         </Text>
       </View>
@@ -490,7 +492,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             {/* Compact Professional Dealership Sites Dropdown */}
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>PRIMARY DEALERSHIP SITE</Text>
+              <Text style={styles.fieldLabel}>DEALERSHIP SITES</Text>
 
               <TouchableOpacity
                 style={styles.dropdownSelector}
@@ -501,9 +503,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <Icon name="building" size={18} color={colors.primary} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.dropdownPrimarySiteText} numberOfLines={1}>
-                      {primarySiteObj?.name || 'Select your workshop'}
+                      {selectedSiteIds.length ? `${primarySiteObj?.name || 'Workshop'}${selectedSiteIds.length > 1 ? ` + ${selectedSiteIds.length - 1} more` : ''}` : 'Select your workshops'}
                     </Text>
-                    <Text style={styles.dropdownSubtext}>Your administrator can assign more sites after setup.</Text>
+                    <Text style={styles.dropdownSubtext}>Select all rooftops you work at. The first selected site is your primary workshop.</Text>
                   </View>
                 </View>
                 <View style={styles.dropdownRightAction}>
@@ -599,9 +601,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalTitle}>Primary Dealership Site</Text>
+                <Text style={styles.modalTitle}>Dealership Sites</Text>
                 <Text style={styles.modalSub}>
-                  Select your primary workshop.
+                  Select one or more rooftops. The first selected is your primary workshop. {selectedSiteIds.length} selected.
                 </Text>
               </View>
               <TouchableOpacity
@@ -614,7 +616,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
             <ScrollView style={styles.modalSiteList} showsVerticalScrollIndicator={false}>
               {rooftopOptions.map((site) => {
-                const isSelected = primarySiteId === site.id;
+                const isSelected = selectedSiteIds.includes(site.id);
 
                 return (
                   <TouchableOpacity
@@ -623,7 +625,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                       styles.modalSiteItem,
                       isSelected && styles.modalSiteItemSelected,
                     ]}
-                    onPress={() => setPrimarySiteId(site.id)}
+                    onPress={() => setSelectedSiteIds(current => current.includes(site.id)
+                      ? current.filter(id => id !== site.id)
+                      : [...current, site.id])}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isSelected }}
+                    accessibilityLabel={`${site.name}${primarySiteId === site.id ? ', primary workshop' : ''}`}
                     activeOpacity={0.75}
                   >
                     <View style={styles.modalSiteItemLeft}>
@@ -645,6 +652,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                         >
                           {site.name}
                         </Text>
+                        {primarySiteId === site.id && <Text style={styles.dropdownSubtext}>Primary workshop</Text>}
                       </View>
                     </View>
 
@@ -659,6 +667,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 variant="primary"
                 size="md"
                 onPress={() => setShowSitesModal(false)}
+                disabled={selectedSiteIds.length === 0}
                 fullWidth
               />
             </View>
