@@ -688,10 +688,11 @@ interface FieldProps {
 const Field: React.FC<FieldProps> = ({ label, icon, rightIcon, onRightIconPress, ...inputProps }) => (
   <View style={styles.field}>
     <Text style={styles.fieldLabel}>{label}</Text>
-    <View style={styles.inputWrapper}>
+    <View style={styles.inputWrapper} testID="auth-field-shell">
       <Icon name={icon} size={18} color={colors.textMuted} />
       <TextInput
         {...inputProps}
+        nativeID={`auth-field-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
         style={styles.input}
         placeholderTextColor={colors.textMuted}
         autoCapitalize="none"

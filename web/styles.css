@@ -4,6 +4,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-s
 #root{display:flex;flex-direction:column;height:100dvh}
 *{box-sizing:border-box}button,input,textarea{font:inherit}button,[role=button]{touch-action:manipulation}svg{flex-shrink:0}
 input,textarea{outline-offset:3px}button:focus-visible,[role=button]:focus-visible{outline:2px solid #0284c7;outline-offset:2px}
+/* Keep auth fields uniform when focused or filled by the browser. */
+input[id^="auth-field-"]:focus{outline:none}
+[data-testid="auth-field-shell"]:focus-within{border-color:#d71920}
+input[id^="auth-field-"]:-webkit-autofill,
+input[id^="auth-field-"]:-webkit-autofill:hover,
+input[id^="auth-field-"]:-webkit-autofill:focus{
+  -webkit-box-shadow:0 0 0 1000px #fff inset;
+  -webkit-text-fill-color:#0f172a;
+  caret-color:#0f172a;
+}
+input[id^="auth-field-"]:autofill{box-shadow:0 0 0 1000px #fff inset;color:#0f172a}
 .dialog-overlay{position:fixed;inset:0;background:#0f172a99;display:flex;align-items:center;justify-content:center;padding:24px;z-index:100000}
 .native-alert{background:white;border-radius:20px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 70px #0004;color:#0f172a}
 .native-alert h2{font-size:18px;margin:0 0 12px}.native-alert p{font-size:14px;line-height:1.6;white-space:pre-wrap;margin:0 0 20px;color:#475569}
