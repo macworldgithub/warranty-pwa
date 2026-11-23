@@ -55,8 +55,12 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
 
   const handleSendOtp = async () => {
     setErrorMessage(null);
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Please enter a valid work email.');
+    if (email.trim() && !email.includes('@')) {
+      setErrorMessage('For a username or employee number account, ask your administrator for a password reset QR code.');
+      return;
+    }
+    if (!email.trim()) {
+      setErrorMessage('Please enter your work email, or ask your administrator for a password reset QR code.');
       return;
     }
 
@@ -126,6 +130,7 @@ export const ForgotPasswordModal: React.FC<ForgotPasswordModalProps> = ({
               <Text style={styles.title}>Reset Password</Text>
               <Text style={styles.subtitle}>
                 Enter your work email and we will send you a 6-digit OTP code to reset your password.
+                {'\n'}If you registered with a username or employee number, ask your administrator for a password reset QR code instead.
               </Text>
 
               {errorMessage && (

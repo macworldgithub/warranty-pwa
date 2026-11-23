@@ -95,7 +95,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
 
   // Setup Form Fields
   const [signUpName, setSignUpName] = useState('');
-  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpUsername, setSignUpUsername] = useState('');
   const [signUpPassword, setSignUpPassword] = useState('');
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState('');
   const [primarySiteId, setPrimarySiteId] = useState<string>('site_cranbourne_byd');
@@ -181,8 +181,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       setAuthError('Please enter your full name.');
       return;
     }
-    if (!signUpEmail.trim() || !signUpEmail.includes('@')) {
-      setAuthError('Please enter a valid work email or username.');
+    if (!/^[a-z0-9][a-z0-9_.-]{2,39}$/i.test(signUpUsername.trim())) {
+      setAuthError('Enter a username or employee number of 3–40 letters, digits, dots, underscores, or hyphens.');
       return;
     }
     if (signUpPassword.length < 6) {
@@ -202,7 +202,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
       await registerTechnician({
         workshopPin: enteredPin.trim(),
         name: signUpName.trim(),
-        email: signUpEmail.trim().toLowerCase(),
+        username: signUpUsername.trim().toLowerCase(),
         password: signUpPassword,
         defaultSiteId: primarySiteId,
       });
@@ -219,7 +219,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
     setAuthError(null);
     setSuccessMessage(null);
     if (!signInEmail.trim()) {
-      setAuthError('Enter your work email or username.');
+      setAuthError('Enter your username, employee number, or email.');
       return;
     }
     if (!signInPassword) {
@@ -460,13 +460,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
             />
 
             <Field
-              label="Username / Work Email"
-              icon="mail"
-              value={signUpEmail}
-              onChangeText={setSignUpEmail}
-              placeholder="name@booran.com.au"
-              keyboardType="email-address"
+              label="Username / Employee Number"
+              icon="user"
+              value={signUpUsername}
+              onChangeText={setSignUpUsername}
+              placeholder="e.g. jake.smith or 001234"
             />
+            <Text style={styles.fieldLabel}>Use 3–40 letters, digits, dots, underscores, or hyphens. Each username or employee number must be unique.</Text>
 
             <Field
               label="Create Password"
@@ -547,11 +547,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
           </View>
 
           <Field
-            label="Work Email / Username"
+            label="Username / Employee Number / Email"
             icon="mail"
             value={signInEmail}
             onChangeText={setSignInEmail}
-            placeholder="Username or email"
+            placeholder="Username, employee number, or email"
           />
 
           <Field

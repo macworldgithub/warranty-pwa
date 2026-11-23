@@ -23,7 +23,8 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<User>;
   registerTechnician: (data: {
     name: string;
-    email: string;
+    email?: string;
+    username?: string;
     password?: string;
     employeeId?: string;
     defaultSiteId?: string;
@@ -137,7 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerTechnician = async (data: {
     name: string;
-    email: string;
+    email?: string;
+    username?: string;
     password?: string;
     employeeId?: string;
     defaultSiteId?: string;

@@ -11,7 +11,8 @@ import {
 export interface RegisterTechnicianDto {
   workshopPin: string;
   name: string;
-  email: string;
+  email?: string;
+  username?: string;
   password?: string;
   employeeId?: string;
   defaultSiteId?: string;

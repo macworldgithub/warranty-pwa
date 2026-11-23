@@ -348,7 +348,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ onBack, onLogout }
           </View>
 
           <Text style={styles.userName}>{user?.name || 'Workshop Member'}</Text>
-          <Text style={styles.userEmail}>{user?.email || '—'}</Text>
+          <Text style={styles.userEmail}>{user?.username || user?.email || '—'}</Text>
 
           <View style={styles.roleBadgeContainer}>
             {isAdmin ? (
