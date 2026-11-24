@@ -1,14 +1,15 @@
 // Send API requests directly to the backend, including during Vite development.
-// Set VITE_API_HOST to the deployed backend host (without /api/v1).
-const configuredApiHost = (import.meta.env.VITE_API_HOST || 'https://warranty-evidence.omnisuiteai.com').replace(/\/+$/, '');
+// Set VITE_API_HOST to override the backend host (without /api/v1).
+const explicitApiHost = import.meta.env.VITE_API_HOST?.trim().replace(/\/+$/, '');
+const configuredApiHost = explicitApiHost || 'https://warranty-evidence.omnisuiteai.com';
 const savedApiHost = localStorage.getItem('booran-api-host')?.replace(/\/+$/, '');
 // Migrate saved frontend and retired LAN addresses to the deployed backend.
-export const DEFAULT_API_HOST = savedApiHost
+const useSavedApiHost = !explicitApiHost
+  && savedApiHost
   && savedApiHost !== window.location.origin
   && (window.location.protocol !== 'https:' || savedApiHost.startsWith('https://'))
-  && savedApiHost !== 'http://192.168.100.33:4000'
-  ? savedApiHost
-  : configuredApiHost;
+  && savedApiHost !== 'http://192.168.100.33:4000';
+export const DEFAULT_API_HOST = useSavedApiHost ? savedApiHost : configuredApiHost;
 
 export const API_BASE_PATH = '/api/v1';
 
