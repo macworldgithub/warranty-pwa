@@ -12,4 +12,4 @@ export interface LoanReservation {
   rego?: string;
 }
 export type ReserveLoanerInput = Pick<LoanReservation,
-  'siteId' | 'loanerNumber' | 'customerName' | 'customerMobile' | 'startAt' | 'endAt'>;
+  'siteId' | 'loanerNumber' | 'customerName' | 'customerMobile' | 'startAt' | 'endAt'> & { rego: string };

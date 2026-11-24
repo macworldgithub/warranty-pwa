@@ -472,6 +472,7 @@ export const LoanVehiclesScreen: React.FC<LoanVehiclesScreenProps> = ({
 
         {/* ── KPI STAT CARDS ─────────────────────────────────── */}
         <LoanReservationsPanel
+          key={effectiveSiteId}
           siteId={isTechnician || isClerk ? technicianSiteId : selectedSiteId}
           sites={siteOptions}
           onIssue={reservation => {

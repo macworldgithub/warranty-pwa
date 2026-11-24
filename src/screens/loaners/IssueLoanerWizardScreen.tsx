@@ -240,7 +240,7 @@ export const IssueLoanerWizardScreen: React.FC<
       setRooftop(allowedRooftops[0].name);
     }
   }, [allowedRooftops, rooftop]);
-  const [registration, setRegistration] = useState('');
+  const [registration, setRegistration] = useState(reservation?.rego && reservation.rego.toUpperCase() !== 'TBA' ? reservation.rego : '');
   const [make, setMake] = useState('');
   const [model, setModel] = useState('');
   const [vehicleYear, setVehicleYear] = useState('');
@@ -485,7 +485,7 @@ export const IssueLoanerWizardScreen: React.FC<
       );
       return false;
     }
-    if (!registration.trim() || !make.trim()) {
+    if (!registration.trim() || (reservation && registration.trim().toUpperCase() === 'TBA') || !make.trim()) {
       setOpenSections(prev => ({ ...prev, 2: true }));
       Alert.alert(
         'Required',
@@ -1162,6 +1162,7 @@ export const IssueLoanerWizardScreen: React.FC<
                   <TextInput
                     style={styles.input}
                     placeholder="CRN-882"
+                    accessibilityLabel="Loan vehicle registration"
                     placeholderTextColor="#94A3B8"
                     autoCapitalize="characters"
                     value={registration}

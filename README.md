@@ -4,6 +4,8 @@ The browser port of the React Native application in `../warranty-app`. All mobil
 
 ## Run locally
 
+The **Loaners** screen includes a loan car booking calendar. Select a day and rooftop, then reserve GWM LOAN 1–6 with the client's name and mobile, collection/return times, and a loan car rego or **TBA**. Multi-day bookings appear on each occupied day; **Upcoming bookings** lists current and future reservations. Staff can cancel an unissued booking or open its handover form, where a known rego is pre-filled and TBA must be replaced with the actual registration. Booking confirmations require the backend. Deploy the matching backend changes with this frontend so the required reservation rego field is accepted and stored.
+
 Requires Node.js 22.20 or newer.
 
 ```powershell
