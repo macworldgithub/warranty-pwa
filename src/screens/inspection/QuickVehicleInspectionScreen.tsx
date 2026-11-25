@@ -24,8 +24,8 @@ const analysisFields = [
   ['odometer', 'Odometer read from photo'],
   ['notes', 'Analysis notes'],
 ] as const;
-const identifierModes = ['Rego', 'RO Number', 'VIN'] as const;
-type IdentifierMode = typeof identifierModes[number];
+const identifierModes = ['VIN', 'Rego'] as const;
+type IdentifierMode = typeof identifierModes[number] | 'RO Number'; // Existing RO-only drafts can still be resumed.
 const validReference = /^[A-Z0-9][A-Z0-9 -]{0,39}$/;
 
 const identificationFields = [
@@ -33,7 +33,7 @@ const identificationFields = [
   ['fleetId', 'Fleet ID'], ['make', 'Make'], ['model', 'Model'],
   ['year', 'Year'], ['odometer', 'Odometer (km)'], ['colour', 'Colour'],
   ['bodyType', 'Body type'], ['clientReference', 'Client reference'],
-  ['inspectorName', 'Inspector name'], ['roNumber', 'RO number'],
+  ['inspectorName', 'Inspector name'],
 ] as const;
 type IdentificationField = typeof identificationFields[number][0];
 type Identification = Partial<Record<IdentificationField, string>>;
@@ -81,7 +81,7 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
   const capturedZones = new Set(photos.map(photo => photo.ruleKey)).size;
   const [reports, setReports] = useState<Report[]>([]);
   const [selected, setSelected] = useState<Report>();
-  const [referenceEdit, setReferenceEdit] = useState<{ id: string; rego: string; roNumber: string }>();
+  const [referenceEdit, setReferenceEdit] = useState<{ id: string; rego: string }>();
 
   const saveReferences = async () => {
     if (!referenceEdit || requestInFlight.current) return;
@@ -89,9 +89,9 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
     setBusy(true);
     setError('');
     try {
-      const { id, rego, roNumber } = referenceEdit;
+      const { id, rego } = referenceEdit;
       const report = await apiClient.patch<Report>('/vehicle-inspections/' + encodeURIComponent(id) +
-        '/references?' + new URLSearchParams({ siteId }).toString(), { rego: rego.trim(), roNumber: roNumber.trim() });
+        '/references?' + new URLSearchParams({ siteId }).toString(), { rego: rego.trim() });
       setSelected(report);
       setReports(current => current.map(item => item.id === report.id ? report : item));
       setReferenceEdit(undefined);
@@ -138,7 +138,7 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
     setPhotos([]);
     setZoneIndex(0);
     setInspectionRego(mode === 'Rego' ? identifier.trim() : '');
-    setInspectionRo(mode === 'RO Number' ? identifier.trim() : '');
+    setInspectionRo('');
     if (mode !== 'VIN') setVehicle(undefined);
     setOdometer(undefined);
     setIdentificationEdit(undefined);
@@ -407,21 +407,20 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
   const mediaUri = (url: string) => url.startsWith('/') ? getBaseServerUrl() + url : url;
 
   const identification: Identification = {
-    ...vehicle, vin, rego, roNumber, inspectorName: draft.current?.inspectorName || user?.name,
+    ...vehicle, vin, rego, inspectorName: draft.current?.inspectorName || user?.name,
     year: vehicle?.year?.toString(), odometer: odometer?.toString(),
   };
   const savedIdentification: Identification = {
     ...selected?.inspection.vehicleDetails,
     vin: selected?.inspection.vin,
     rego: selected?.inspection.rego,
-    roNumber: selected?.inspection.roNumber,
     inspectorName: selected?.inspectorName,
     year: selected?.inspection.vehicleDetails?.year?.toString(),
     odometer: selected?.inspection.odometer?.toString(),
   };
   const identificationError = identificationEdit && (
-    [identificationEdit.rego, identificationEdit.roNumber].some(value => !!value?.trim() && !validReference.test(value.trim()))
-      ? 'Use letters, numbers, spaces or hyphens for the registration and RO number.'
+    identificationEdit.rego?.trim() && !validReference.test(identificationEdit.rego.trim())
+      ? 'Use letters, numbers, spaces or hyphens for the registration.'
       : identificationEdit.year && !/^\d{4}$/.test(identificationEdit.year.trim())
         ? 'Enter a four-digit year.'
         : identificationEdit.odometer && !/^\d{1,9}$/.test(identificationEdit.odometer.trim())
@@ -430,10 +429,9 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
   );
   const saveIdentification = () => {
     if (!identificationEdit || identificationError) return;
-    const { rego, roNumber, stockNumber, fleetId, make, model, year, odometer, colour, bodyType, clientReference } =
+    const { rego, stockNumber, fleetId, make, model, year, odometer, colour, bodyType, clientReference } =
       identificationEdit;
     setInspectionRego(rego?.trim() || '');
-    setInspectionRo(roNumber?.trim() || '');
     setOdometer(odometer?.trim() ? Number(odometer) : undefined);
     setVehicle(current => ({
       ...current, stockNumber: stockNumber?.trim(), fleetId: fleetId?.trim(), make: make?.trim(), model: model?.trim(),
@@ -466,8 +464,25 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
       {!siteId && <Text style={styles.secondary}>Select an assigned rooftop before continuing.</Text>}
       {view === 'entry' && <View style={styles.entryCard}>
         <Text style={styles.title}>New inspection</Text>
+        <View style={styles.actions}>
+          {identifierModes.map(option => {
+            const selected = mode === option;
+            return <TouchableOpacity key={option} accessibilityRole="button" accessibilityState={{ selected }}
+              style={[styles.identifierOption, selected && styles.activeTab]}
+              onPress={() => {
+                if (selected) return;
+                setMode(option);
+                setIdentifier('');
+                setLookupVin('');
+                setVehicle(undefined);
+                setError('');
+              }}>
+              <Text style={[styles.label, selected && { color: colors.textInverse }]}>{option}</Text>
+            </TouchableOpacity>;
+          })}
+        </View>
         <View style={styles.field}>
-          <Text style={styles.label}>VIN</Text>
+          <Text style={styles.label}>{mode}</Text>
           <TextInput value={identifier} onChangeText={value => setIdentifier(mode === 'VIN'
             ? value.toUpperCase().replace(/\s/g, '').slice(0, 17)
             : value.toUpperCase().slice(0, 40))}
@@ -495,8 +510,8 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
             <View style={styles.identificationGrid}>
               {identificationFields.map(([key, label]) => {
                 const editable = key !== 'vin' && key !== 'inspectorName' &&
-                  !(key === 'rego' && mode === 'Rego') && !(key === 'roNumber' && mode === 'RO Number');
-                const reference = key === 'rego' || key === 'roNumber';
+                  !(key === 'rego' && mode === 'Rego');
+                const reference = key === 'rego';
                 return <View key={key} style={styles.identificationField}>
                   <Text style={styles.identificationLabel}>{label}</Text>
                   {identificationEdit && editable
@@ -591,17 +606,14 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
               <Text style={styles.label}>Rego</Text>
               <TextInput value={referenceEdit.rego} accessibilityLabel="Saved inspection rego" style={inputStyle}
                 editable={!busy} maxLength={40} onChangeText={rego => setReferenceEdit({ ...referenceEdit, rego })} />
-              <Text style={styles.label}>RO number</Text>
-              <TextInput value={referenceEdit.roNumber} accessibilityLabel="Saved inspection RO number" style={inputStyle}
-                editable={!busy} maxLength={40} onChangeText={roNumber => setReferenceEdit({ ...referenceEdit, roNumber })} />
               <View style={styles.actions}>
-                <Button title="Save Vehicle Details" disabled={busy || !(referenceEdit.rego.trim() || referenceEdit.roNumber.trim())} onPress={() => void saveReferences()} />
+                <Button title="Save Vehicle Details" disabled={busy || !referenceEdit.rego.trim()} onPress={() => void saveReferences()} />
                 <Button title="Cancel" variant="outline" disabled={busy} onPress={() => setReferenceEdit(undefined)} />
               </View>
             </View> : <View style={styles.cameraAction}>
-              <Button title="Edit Rego / RO" variant="outline" onPress={() => {
+              <Button title="Edit Rego" variant="outline" onPress={() => {
                 setError('');
-                setReferenceEdit({ id: selected.id, rego: selected.inspection.rego || '', roNumber: selected.inspection.roNumber || '' });
+                setReferenceEdit({ id: selected.id, rego: selected.inspection.rego || '' });
               }} />
             </View>)}
           {canCapture && selected.createdBy === user?.id && selected.inspection.status !== 'COMPLETE' &&
@@ -666,7 +678,7 @@ export function QuickVehicleInspectionScreen({ onBack, showSaved = false, initia
         <View style={styles.searchField}>
           <Search size={18} color={colors.textSecondary} />
           <TextInput value={identifier} onChangeText={value => setIdentifier(value.toUpperCase())}
-            accessibilityLabel="Search by rego, RO or VIN" placeholder="Search by rego, RO or VIN"
+            accessibilityLabel="Search by rego or VIN" placeholder="Search by rego or VIN"
             placeholderTextColor={colors.textMuted} autoCapitalize="characters" autoCorrect={false} style={styles.searchInput} />
         </View>
         {reports.filter(reportMatches).map(report => <TouchableOpacity key={report.id} style={styles.reportListItem}
@@ -721,6 +733,7 @@ const styles = StyleSheet.create({
   entryCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 20, gap: 18 },
   title: { fontSize: 25, fontWeight: '700', color: colors.textPrimary },
   field: { gap: 6 },
+  identifierOption: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8, borderWidth: 1, borderColor: colors.border, borderRadius: 9 },
   label: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
   vin: { minHeight: 48, fontSize: 16, letterSpacing: 1, backgroundColor: colors.background },
   summary: { flexDirection: 'row', gap: 12, padding: 14, alignItems: 'center', backgroundColor: colors.backgroundSecondary, borderRadius: 12 },
