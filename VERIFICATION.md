@@ -2,6 +2,37 @@
 
 Current implementation status: [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md). The earlier [FEATURE_PARITY_AUDIT.md](FEATURE_PARITY_AUDIT.md) is historical; its two reproduced defects are fixed and covered by ordinary passing regressions.
 
+## Rego verification - 25 November 2026
+
+Deployment follow-up: `https://warranty-evidence.omnisuiteai.com/api/v1/vehicle/decode-rego` currently returns `404 Cannot POST`, and its published `/api/docs-json` omits the Rego route. Commit `bb63046` on the backend's `main` contains the route; the running API needs that backend deployed, rebuilt and restarted. The passing browser/provider checks below verify the local implementation and InfoAgent service, not availability of the deployed Warranty HTTP route. Additional Nest HTTP route tests passed locally with `1GAT832 / VIC`; `node tools/check-rego-route.cjs` in the backend reproduces the deployment failure without user credentials.
+
+The PWA Rego change passed the targeted checks below. No functional defects were found in the covered Rego scenarios; this verification added browser coverage without changing application source.
+
+| Check | Result |
+| --- | --- |
+| Rego browser checks | **11 passed** in Windows Chrome: 10 in the expanded suite (including the live lookup), plus the added saved-history check run separately. |
+| Warranty backend tests | **42 passed** across InfoAgent, Rego, VIN and controller suites. |
+| Production builds | PWA build/service worker and Warranty backend build passed. |
+| Live InfoAgent Rego | The PWA sent TEST01/VIC through Warranty's real InfoAgent/Rego service, displayed returned details and VIN, and carried the full normalized data into an isolated draft save. |
+| Live InfoAgent VIN | Warranty's VIN service returned matching identity details and check-digit metadata from InfoAgent. |
+| Credential check | Client ID, client secret and their encoded Basic authentication value were absent from generated PWA JavaScript bundles. |
+| TypeScript | **Blocked by two existing errors:** `src/api/brands.api.ts:7` references missing `Brand.isActive`; `tests/vehicle-photos.test.ts:4` imports from the absent sibling `warranty-app` folder. No Rego test/source errors were reported. |
+
+Browser coverage includes registration state selection, plate normalization, missing state/invalid plates, vehicle summary, capture and saved identifiers, resuming/re-saving a draft without duplicate uploads, lookup retry, no-match and network failures with manual capture, stale response protection after changing plate or mode, VIN regression and registration prefill, desktop/mobile overflow checks, and saved Rego-only history search when the current lookup returns a VIN.
+
+Browser authentication, photo uploads and inspection storage used isolated fixtures; no real dealership inspection records were created or modified. The InfoAgent development report lookups were live. Physical Android/iPhone hardware and production deployment were not tested in this run.
+
+To repeat the provider-backed browser check, build the sibling Warranty backend and PWA first, then run from this PWA directory in PowerShell:
+
+```powershell
+$env:RUN_INFOAGENT_LIVE = '1'
+npm run test:e2e -- rego-inspection.spec.ts
+```
+
+The live check loads credentials only in the Node test runner from the backend's ignored `.env` and requires the development API host. Without `RUN_INFOAGENT_LIVE=1`, the provider-backed test is skipped and the fixture-backed checks still run. Mobile screenshots from this run were retained in `.tmp/rego-verification/`.
+
+The passing-check table below records the earlier 17 November run; the Rego results and current TypeScript limitations above take precedence for this change.
+
 ## Final passing checks
 
 | Check | Result |

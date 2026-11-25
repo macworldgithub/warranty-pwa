@@ -27,6 +27,10 @@ Open http://localhost:4173. Choose **Install app** on the login screen or in **P
 
 ## Included workflows
 
+The new-inspection **Rego** tab uses a registration plate and Australian state/territory to request vehicle identification through the backend's authenticated `POST /vehicle/decode-rego` endpoint. Returned details and VIN are carried into photo capture and saved inspections. Failed lookups allow retry or manual entry. Deploy the matching backend changes with the PWA, and configure `INFOAGENT_BASE_URL`, `INFOAGENT_CLIENT_ID` and `INFOAGENT_CLIENT_SECRET` on the backend only.
+
+The backend uses the same InfoAgent NEVDIS contract as Booran Sales Floor: Basic OAuth client authentication, a cached bearer token renewed 60 seconds before expiry, and `POST /nevdis/v1/vehicle-report` with plate/state (or VIN) and the same six products. It normalizes `result.vehicles[0]` into identification, registration, stolen/written-off flags and warnings. VIN lookup tries InfoAgent first when configured and retains the existing VIN decoder as fallback. `INFOAGENT_AUTH_URL` and `INFOAGENT_TIMEOUT_MS` can override authentication and request timeout on the backend. Credentials and tokens stay on the server.
+
 | Area | Implementation |
 | --- | --- |
 | Authentication | PIN activation screens, sign-in, registration, password recovery, OTP dialogs, profile and site selection |

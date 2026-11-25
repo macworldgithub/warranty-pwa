@@ -169,13 +169,36 @@ export interface CreateWarrantyCaseDto {
   voiceNotes?: VoiceNote[];
 }
 
-export interface DecodeVinResponse {
+export interface InfoAgentVehicleMetadata {
+  rego?: string;
+  state?: string;
+  colour?: string;
+  bodyType?: string;
+  vehicleType?: string;
+  engineNumber?: string;
+  compliancePlate?: string | null;
+  registration?: { status: string; expiryDate: string | null };
+  riskFlags?: { isStolen: boolean; isWrittenOff: boolean; stolenIncidents: Record<string, unknown>[]; writtenOffIncidents: Record<string, unknown>[] };
+  warnings?: string[];
+  source?: string;
+}
+
+export interface DecodeVinResponse extends InfoAgentVehicleMetadata {
   vin: string;
   make: string;
   model: string;
-  year: number;
-  powertrain: PowertrainType;
+  year: number | null;
+  powertrain?: PowertrainType;
   provider: string;
   isValidCheckDigit: boolean;
   requiresManualConfirm: boolean;
+}
+
+export type RegistrationState = 'ACT' | 'NSW' | 'NT' | 'QLD' | 'SA' | 'TAS' | 'VIC' | 'WA';
+
+export interface DecodeRegoResponse extends Partial<DecodeVinResponse> {
+  rego: string;
+  state: RegistrationState;
+  colour?: string;
+  bodyType?: string;
 }
