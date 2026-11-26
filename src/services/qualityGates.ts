@@ -1,4 +1,4 @@
-import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from './vehiclePhotos';
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto, evidenceRuleKeysMatch } from './vehiclePhotos';
 import { EvidenceItem, QualityCheckResult, BrandPackRule } from '../types';
 
 export const qualityGates = {
@@ -89,15 +89,28 @@ export const qualityGates = {
   /** Seven vehicle photos are the minimum required for workshop submission. */
   evaluateSubmissionReadiness: (
     resolvedRules: BrandPackRule[],
-    evidenceItems: EvidenceItem[]
+    evidenceItems: EvidenceItem[],
+    brandId?: string,
   ): { isReady: boolean; missingRules: BrandPackRule[]; completedCount: number; mandatoryCount: number } => {
     const mandatoryRules: BrandPackRule[] = VEHICLE_PHOTO_CATEGORIES.filter(category => category.isMandatory).map(category => ({
       id: category.ruleKey, ruleKey: category.ruleKey, name: category.name,
       description: category.description, mediaType: 'image', tier: 1, isMandatory: true,
       namingConvention: '[DealerRONumber]' + category.ruleKey + '.jpg',
     }));
+    // The dedicated Chery checklist adds its mandatory documents, images and video
+    // to the existing walkaround, counting VIN and odometer only once.
+    if (brandId === 'brand_chery' || resolvedRules.some(rule => rule.ruleKey === 'vin_presentation')) {
+      for (const rule of resolvedRules.filter(rule => rule.isMandatory)) {
+        const existing = mandatoryRules.findIndex(item => evidenceRuleKeysMatch(item.ruleKey, rule.ruleKey));
+        if (existing >= 0) mandatoryRules[existing] = rule;
+        else mandatoryRules.push(rule);
+      }
+    }
     const missingRules = mandatoryRules.filter(rule => !evidenceItems.some(item =>
-      item.ruleKey === rule.ruleKey && hasVehiclePhoto(item)));
+      evidenceRuleKeysMatch(item.ruleKey, rule.ruleKey) &&
+      item.mediaType === rule.mediaType && item.qualityStatus !== 'FAILED' &&
+      Boolean(item.fileUri || item.storageUrl || item.serverUrl) &&
+      (rule.mediaType !== 'image' || hasVehiclePhoto(item))));
     return {
       isReady: missingRules.length === 0,
       missingRules,

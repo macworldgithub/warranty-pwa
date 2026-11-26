@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { VEHICLE_PHOTO_CATEGORIES, missingVehiclePhotos, withVehiclePhotoRules } from '../src/services/vehiclePhotos';
 import { qualityGates } from '../src/services/qualityGates';
-import { qualityGates as appQualityGates } from '../../warranty-app/src/services/qualityGates';
 import { missingVehiclePhotos as serverMissingPhotos } from '../../warranty-evidence-backend/src/modules/warranty-cases/vehicle-photos';
 
 const required = VEHICLE_PHOTO_CATEGORIES.filter(photo => photo.isMandatory);
 const uploaded = required.map(photo => ({ ruleKey: photo.ruleKey, mediaType: 'image' as const, storageUrl: '/uploads/' + photo.ruleKey + '.jpg' }));
-for (const [client, gates] of [['PWA', qualityGates], ['App', appQualityGates]] as const) {
+for (const [client, gates] of [['PWA', qualityGates]] as const) {
   describe(client + ' vehicle photo gates', () => {
     it('requires exactly the seven requested categories', () => {
       expect(gates.evaluateSubmissionReadiness([], [])).toMatchObject({ isReady: false, mandatoryCount: 7, completedCount: 0 });

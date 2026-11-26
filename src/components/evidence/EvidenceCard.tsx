@@ -74,7 +74,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         : rawImageUri
     : null;
 
-  const prefersPdf = rule.ruleKey === 'diagnostic_evidence';
+  const isDocumentRule = rule.mediaType === 'document';
+  const prefersPdf = rule.ruleKey === 'diagnostic_evidence' || isDocumentRule;
   const isDocument = evidence?.mediaType === 'document';
   const isCaptured = Boolean(evidenceFileUri);
   const isVideo =
@@ -104,8 +105,8 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
     setIsCapturing(true);
     try {
       let res;
-      if (source === 'pdf') {
-        res = await cameraService.pickPdf();
+      if (source === 'pdf' || (prefersPdf && !source)) {
+        res = await (isDocumentRule ? cameraService.pickDocument() : cameraService.pickPdf());
       } else if (source) {
         res = await cameraService.pickFromGallery(isVideo);
       } else if (isVideo) {
@@ -117,12 +118,13 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
       if (!res.success && res.error && !/cancel/i.test(res.error)) Alert.alert('Capture Failed', res.error);
 
       if (res.success && res.fileUri) {
-        const ocrText = isVideo || source === 'pdf' ? undefined : await recognizeEvidence(res.fileUri, rule.ruleKey);
+        const capturedDocument = res.mimeType === 'application/pdf' || res.mimeType === 'text/plain';
+        const ocrText = isVideo || capturedDocument ? undefined : await recognizeEvidence(res.fileUri, rule.ruleKey);
         onSaveEvidence({
           ...(allowsMultipleEvidencePhotos(rule.ruleKey) ? { id: evidence?.id || crypto.randomUUID() } : {}),
           ruleKey: rule.ruleKey,
           ruleName: rule.name,
-          mediaType: source === 'pdf' ? 'document' : prefersPdf ? 'image' : rule.mediaType,
+          mediaType: capturedDocument ? 'document' : prefersPdf ? 'image' : rule.mediaType,
           mimeType: res.mimeType,
           fileUri: res.fileUri,
           fileSize: res.fileSize || (isVideo ? 5200000 : 1850000),
@@ -192,7 +194,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
       {/* Guidance Text */}
       {(prefersPdf || rule.guidanceText) && !photoLabel && (
         <Text style={styles.guidanceText}>
-          {prefersPdf ? 'Upload the PDF report with the DTC codes, system status and freeze-frame data. You can upload a photo if a PDF is unavailable.' : rule.guidanceText}
+          {isDocumentRule ? rule.guidanceText : prefersPdf ? 'Upload the PDF report with the DTC codes, system status and freeze-frame data. You can upload a photo if a PDF is unavailable.' : rule.guidanceText}
         </Text>
       )}
 
@@ -257,7 +259,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         <View style={styles.previewContainer}>
           <View style={[styles.previewMediaBox, isCompactLayout && styles.previewMediaBoxCompact]}>
             {isDocument && imageUri ? (
-              <Button title="Open PDF" variant="outline" size="sm"
+              <Button title="Open document" variant="outline" size="sm"
                 onPress={() => void Linking.openURL(resolveMedia(imageUri))} />
             ) : isVideo ? (
               <TouchableOpacity
@@ -349,7 +351,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
           {/* Action buttons when captured */}
           <View style={styles.actionRow}>
             <Button
-              title={prefersPdf ? "Replace with PDF" : "Retake"}
+              title={isDocumentRule ? 'Replace document' : prefersPdf ? "Replace with PDF" : "Retake"}
               variant="outline"
               size="sm"
               loading={isCapturing}
@@ -379,7 +381,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
         <View style={styles.unopenedContainer}>
           <View style={styles.captureBtnRow}>
             <Button
-              title={prefersPdf ? 'Upload PDF' : isVideo ? 'Record Video (.mp4)' : addingPhoto ? 'Add Photo' : 'Capture Photo'}
+              title={isDocumentRule ? 'Upload document (PDF/TXT)' : prefersPdf ? 'Upload PDF' : isVideo ? 'Record Video (.mp4)' : addingPhoto ? 'Add Photo' : 'Capture Photo'}
               variant={rule.isMandatory ? 'primary' : 'secondary'}
               size="md"
               loading={isCapturing}
@@ -393,7 +395,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               onPress={() => handleCapture(false)}
               style={{ flex: 1 }}
             />
-            <TouchableOpacity
+            {!isDocumentRule && <TouchableOpacity
               activeOpacity={0.7}
               disabled={isCapturing}
               accessibilityLabel={prefersPdf ? "Upload photo" : "Upload photo or video"}
@@ -401,7 +403,7 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({
               style={styles.galleryBtn}
             >
               <Icon name="upload" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
+            </TouchableOpacity>}
           </View>
         </View>
       )}

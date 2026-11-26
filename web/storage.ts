@@ -67,7 +67,7 @@ export async function readMedia(uri: string): Promise<Blob> {
 }
 export async function appendMedia(form: FormData, key: string, media: { uri: string; type: string; name: string }) {
   const blob = await readMedia(media.uri);
-  const extension = blob.type.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg');
+  const extension = blob.type === 'text/plain' ? 'txt' : blob.type.split('/')[1]?.split(';')[0]?.replace('jpeg', 'jpg');
   const name = extension ? media.name.replace(/\.[^.]+$/, `.${extension}`) : media.name;
   form.append(key, blob, name);
 }

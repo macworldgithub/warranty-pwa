@@ -1,4 +1,4 @@
-import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto, withVehiclePhotoRules } from '../../services/vehiclePhotos';
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto, withVehiclePhotoRules, evidenceRuleKeysMatch } from '../../services/vehiclePhotos';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -207,12 +207,12 @@ export const Step6_ReviewSubmit: React.FC<Step6Props> = ({
 
       {/* 3. Evidence Checklist */}
       <Card
-        title={`Vehicle Photos (${completedMandatoryCount}/7 required)`}
+        title={`Required Evidence (${completedMandatoryCount}/${mandatoryCount} complete)`}
       >
         <View style={styles.checklist}>
           {withVehiclePhotoRules(resolvedRules).map((rule, idx) => {
-            const ev = evidenceItems.find(e => e.ruleKey === rule.ruleKey);
-            const isPresent = VEHICLE_PHOTO_CATEGORIES.some(photo => photo.ruleKey === rule.ruleKey)
+            const ev = evidenceItems.find(e => evidenceRuleKeysMatch(e.ruleKey, rule.ruleKey));
+            const isPresent = VEHICLE_PHOTO_CATEGORIES.some(photo => evidenceRuleKeysMatch(photo.ruleKey, rule.ruleKey))
               ? hasVehiclePhoto(ev)
               : Boolean(ev?.fileUri || ev?.storageUrl || ev?.serverUrl);
 

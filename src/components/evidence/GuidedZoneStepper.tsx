@@ -1,5 +1,5 @@
 import { EvidenceAiPanel } from './EvidenceAiPanel';
-import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto } from '../../services/vehiclePhotos';
+import { VEHICLE_PHOTO_CATEGORIES, hasVehiclePhoto, evidenceRuleKeysMatch } from '../../services/vehiclePhotos';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -54,7 +54,7 @@ export const GuidedZoneStepper: React.FC<GuidedZoneStepperProps> = ({
 
   // Helper to resolve evidence item for a zone
   const getZoneEvidence = (ruleKey: string): EvidenceItem | undefined => {
-    return evidenceItems.find(e => e.ruleKey === ruleKey);
+    return evidenceItems.find(e => evidenceRuleKeysMatch(e.ruleKey, ruleKey));
   };
 
   // Helper to resolve full image URI

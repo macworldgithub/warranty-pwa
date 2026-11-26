@@ -34,6 +34,29 @@ export async function requestCameraPermission(): Promise<boolean> {
 }
 
 export const cameraService = {
+  pickDocument: (): Promise<CaptureMediaResult> => new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,text/plain,.pdf,.txt';
+    input.oncancel = () => resolve({ success: false, error: 'User cancelled' });
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return resolve({ success: false, error: 'User cancelled' });
+      try {
+        const isPdf = file.name.toLowerCase().endsWith('.pdf');
+        if ((!isPdf && !file.name.toLowerCase().endsWith('.txt')) ||
+          (isPdf && await file.slice(0, 5).text() !== '%PDF-')) {
+          return resolve({ success: false, error: 'Select a PDF or text document.' });
+        }
+        const mimeType = isPdf ? 'application/pdf' : 'text/plain';
+        const fileUri = await saveMedia(file.slice(0, file.size, mimeType));
+        resolve({ success: true, fileUri, fileSize: file.size, mimeType });
+      } catch {
+        resolve({ success: false, error: 'Unable to read the document.' });
+      }
+    };
+    input.click();
+  }),
   pickPdf: (): Promise<CaptureMediaResult> => new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';

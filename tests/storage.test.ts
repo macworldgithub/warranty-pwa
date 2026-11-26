@@ -30,6 +30,17 @@ describe('durable workshop data', () => {
     const form = new FormData(); await s.appendMedia(form, 'file', { uri, type: 'video/mp4', name: 'ROFront.mp4' });
     const file = form.get('file') as File; expect(file.name).toBe('ROFront.webm'); expect(file.type).toBe('video/webm'); expect(await file.text()).toBe('real video bytes');
   });
+  it('preserves text evidence bytes, MIME type and the .txt extension during replay', async () => {
+    const storage = await import('../web/storage');
+    await storage.initializeStorage();
+    const uri = await storage.saveMedia(new Blob(['Customer reports a rattle'], { type: 'text/plain' }));
+    const { evidenceForm } = await import('../web/replay');
+    const form = await evidenceForm({ ruleKey: 'customer_complaint', mediaType: 'document', fileUri: uri }, 'RO123');
+    const file = form.get('file') as File;
+    expect(file.name).toBe('RO123CustomerComplaint.txt');
+    expect(file.type).toBe('text/plain');
+    expect(await file.text()).toBe('Customer reports a rattle');
+  });
   it('restores media after reload and resolves expired object URLs', async () => {
     const s = await import('../web/storage'); await s.initializeStorage(); const uri = await s.saveMedia(new Blob(['photo'], { type: 'image/jpeg' }));
     vi.resetModules(); const reloaded = await import('../web/storage'); await reloaded.initializeStorage();

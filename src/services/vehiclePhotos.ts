@@ -12,6 +12,12 @@ export const VEHICLE_PHOTO_CATEGORIES = [
   { ruleKey: 'modifications_photo', name: 'MODIFICATIONS', description: 'Any vehicle modifications, if applicable.', isMandatory: false },
 ] as const;
 
+
+// Presentation evidence fulfils the same VIN/odometer walkaround photo.
+export const vehiclePhotoKey = (key: string) =>
+  key === 'vin_presentation' ? 'vin_photo' : key === 'odometer_presentation' ? 'odometer_photo' : key;
+export const evidenceRuleKeysMatch = (left: string, right: string) => vehiclePhotoKey(left) === vehiclePhotoKey(right);
+
 type PhotoEvidence = { ruleKey: string; mediaType?: string; fileUri?: string; storageUrl?: string; serverUrl?: string; qualityStatus?: string };
 export function hasVehiclePhoto(item?: PhotoEvidence, uploadedOnly = false): boolean {
   if (!item || item.mediaType !== 'image' || item.qualityStatus === 'FAILED') return false;
@@ -20,17 +26,21 @@ export function hasVehiclePhoto(item?: PhotoEvidence, uploadedOnly = false): boo
 }
 export function missingVehiclePhotos(items: readonly PhotoEvidence[], uploadedOnly = false) {
   return VEHICLE_PHOTO_CATEGORIES.filter(category => category.isMandatory &&
-    !items.some(item => item.ruleKey === category.ruleKey && hasVehiclePhoto(item, uploadedOnly)));
+    !items.some(item => evidenceRuleKeysMatch(item.ruleKey, category.ruleKey) && hasVehiclePhoto(item, uploadedOnly)));
 }
 
 export function withVehiclePhotoRules(rules: BrandPackRule[]): BrandPackRule[] {
   return [
-    ...VEHICLE_PHOTO_CATEGORIES.map(category => ({
-      ...rules.find(rule => rule.ruleKey === category.ruleKey),
-      id: category.ruleKey, ruleKey: category.ruleKey, name: category.name,
-      description: category.description, mediaType: 'image' as const, tier: 1 as const,
-      isMandatory: category.isMandatory, namingConvention: '[DealerRONumber]' + category.ruleKey + '.jpg',
-    })),
-    ...rules.filter(rule => !VEHICLE_PHOTO_CATEGORIES.some(category => category.ruleKey === rule.ruleKey)),
+    ...VEHICLE_PHOTO_CATEGORIES.map(category => {
+      const configured = rules.find(rule => evidenceRuleKeysMatch(rule.ruleKey, category.ruleKey));
+      return {
+        id: category.ruleKey, ruleKey: category.ruleKey, name: category.name,
+        description: category.description, mediaType: 'image' as const, tier: 1 as const,
+        namingConvention: '[DealerRONumber]' + category.ruleKey + '.jpg',
+        ...configured,
+        isMandatory: category.isMandatory,
+      };
+    }),
+    ...rules.filter(rule => !VEHICLE_PHOTO_CATEGORIES.some(category => evidenceRuleKeysMatch(category.ruleKey, rule.ruleKey))),
   ];
 }

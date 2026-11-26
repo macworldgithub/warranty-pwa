@@ -1,4 +1,4 @@
-import { VEHICLE_PHOTO_CATEGORIES, missingVehiclePhotos } from '../../services/vehiclePhotos';
+import { VEHICLE_PHOTO_CATEGORIES, missingVehiclePhotos, evidenceRuleKeysMatch } from '../../services/vehiclePhotos';
 import React from 'react';
 import { allowsMultipleEvidencePhotos, getEvidenceFileUri } from '../../utils/evidence';
 import {
@@ -48,7 +48,7 @@ export const Step3_GuidedEvidence: React.FC<Step3Props> = ({ onNext, onPrev }) =
       r.tier === 1 &&
       r.ruleKey !== 'vin_photo' &&
       r.ruleKey !== 'odometer_photo' &&
-      !VEHICLE_PHOTO_CATEGORIES.some(category => category.ruleKey === r.ruleKey)
+      !VEHICLE_PHOTO_CATEGORIES.some(category => evidenceRuleKeysMatch(category.ruleKey, r.ruleKey))
   );
 
   const missingDefectPhotos = tier1Rules.filter(rule => allowsMultipleEvidencePhotos(rule.ruleKey) && rule.isMandatory &&

@@ -1,4 +1,7 @@
 import { BrandPack, BrandPackRule, EvaluateRulesDto, EvaluatedRulesResponse } from '../types';
+import { CHERY_EVIDENCE_RULES } from './chery-evidence-rules';
+
+const isCheryBrand = (value: string) => ['chery', 'brand_chery', 'brandpack_chery_v1'].includes((value || '').toLowerCase());
 
 /**
  * Standard BYD Attachment A Brand Pack Rules
@@ -340,9 +343,17 @@ export const brandPacksService = {
   /**
    * Returns active brand pack for any brand.
    * If BYD, returns BYD Attachment A Pack.
-   * If other brand (Hyundai, Kia, MG, Chery, Toyota, Ford, etc.), returns the common Tier 1 pack.
+   * Chery uses its dedicated template; remaining brands use the common pack.
    */
   getBrandPackForBrand: (brandIdOrName: string): BrandPack => {
+    if (isCheryBrand(brandIdOrName)) {
+      return {
+        id: 'brandpack_chery_v1', brandId: 'brand_chery', brandName: 'Chery',
+        version: 1, status: 'PUBLISHED', name: 'Chery Warranty Evidence Requirements',
+        description: '20 evidence requirements from the supplied Chery evidence rules template.',
+        rules: CHERY_EVIDENCE_RULES.map(rule => ({ ...rule })),
+      };
+    }
     const isByd =
       (brandIdOrName || '').toLowerCase().includes('byd') ||
       brandIdOrName === 'brand_byd';
@@ -395,9 +406,17 @@ export const brandPacksService = {
   /**
    * Resolves exact required rules based on brand, fault category, and conditional gates.
    * If BYD: applies BYD Attachment A + Category Annex 2 criteria.
-   * If other brand: defaults to BYD Tier 1 criteria minus specific BYD fault rules.
+   * Chery preserves all template rows; other brands use common criteria.
    */
   evaluateRules: (dto: EvaluateRulesDto): EvaluatedRulesResponse => {
+    if (isCheryBrand(dto.brandId)) {
+      const pack = brandPacksService.getBrandPackForBrand(dto.brandId);
+      return {
+        brandPackId: pack.id, brandPackVersion: pack.version, packName: pack.name,
+        resolvedRules: pack.rules, mandatoryCount: pack.rules.filter(rule => rule.isMandatory).length,
+        optionalCount: pack.rules.filter(rule => !rule.isMandatory).length,
+      };
+    }
     const isByd =
       (dto.brandId || '').toLowerCase().includes('byd') ||
       dto.brandId === 'brand_byd';

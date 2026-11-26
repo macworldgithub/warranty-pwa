@@ -1,5 +1,5 @@
 import { allowsMultipleEvidencePhotos, getEvidenceFileUri, getEvidenceFormat } from '../utils/evidence';
-import { missingVehiclePhotos } from '../services/vehiclePhotos';
+import { evidenceRuleKeysMatch } from '../services/vehiclePhotos';
 import { apiClient } from '../api/client';
 import { appendMedia, isLocalMedia, persist, serializeMedia } from '../../web/storage';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -219,7 +219,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     const readiness = qualityGates.evaluateSubmissionReadiness(
       state.resolvedRules,
-      state.evidenceItems
+      state.evidenceItems,
+      state.brandId,
     );
 
     setState(prev => ({
@@ -229,7 +230,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       completedMandatoryCount: readiness.completedCount,
       missingRules: readiness.missingRules,
     }));
-  }, [state.resolvedRules, state.evidenceItems]);
+  }, [state.resolvedRules, state.evidenceItems, state.brandId]);
 
   // Step 0 Setters
   const setSite = useCallback((site: Site) => {
@@ -271,7 +272,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setState(prev => ({
         ...prev,
         activeBrandPack: bp,
-        resolvedRules: bp.rules || [],
+        resolvedRules: evalRes.resolvedRules || [],
         isLoadingRules: false,
       }));
     } catch {
@@ -394,6 +395,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Evidence Actions
   const saveEvidenceItem = (item: Partial<EvidenceItem> & { ruleKey: string }) => {
     setState(prev => {
+      const configuredRule = prev.resolvedRules.find(rule => evidenceRuleKeysMatch(rule.ruleKey, item.ruleKey));
+      if (configuredRule) item = { ...item, ruleKey: configuredRule.ruleKey };
       const rule = prev.resolvedRules.find(r => r.ruleKey === item.ruleKey) || {
         id: `rule_${item.ruleKey}`,
         ruleKey: item.ruleKey,
@@ -405,7 +408,9 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         namingConvention: `[DealerRONumber]${item.ruleKey}.jpg`,
       };
 
-      const oemName = item.oemFileName || namingEngine.generateOemFileName(rule, prev.roNumber);
+      const oemName = prev.brandId === 'brand_chery' && configuredRule
+        ? namingEngine.generateOemFileName(rule, prev.roNumber)
+        : item.oemFileName || namingEngine.generateOemFileName(rule, prev.roNumber);
 
       const existingIndex = prev.evidenceItems.findIndex(e =>
         e.ruleKey === item.ruleKey && (!allowsMultipleEvidencePhotos(item.ruleKey) || e.id === item.id),
@@ -454,6 +459,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const removeEvidenceItem = (ruleKey: string, evidenceId?: string) => {
+    ruleKey = state.evidenceItems.find(item => evidenceRuleKeysMatch(item.ruleKey, ruleKey))?.ruleKey || ruleKey;
     const keepEvidence = (item: EvidenceItem) =>
       item.ruleKey !== ruleKey || (evidenceId !== undefined && item.id !== evidenceId);
     if (allowsMultipleEvidencePhotos(ruleKey) && state.vin) {
@@ -470,7 +476,7 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const getEvidenceForRule = (ruleKey: string): EvidenceItem | undefined => {
-    return state.evidenceItems.find(e => e.ruleKey === ruleKey);
+    return state.evidenceItems.find(e => evidenceRuleKeysMatch(e.ruleKey, ruleKey));
   };
 
   const addVoiceNote = (note: VoiceNote) => {
@@ -632,8 +638,8 @@ export const CaseWizardProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const saveDraft = () => saveSubmissionDraft(undefined, state.evidenceItems, true);
 
   const submitCase = async (): Promise<WarrantyCase> => {
-    const missingPhotos = missingVehiclePhotos(state.evidenceItems);
-    if (missingPhotos.length) throw new Error('Required vehicle photos missing: ' + missingPhotos.map(photo => photo.name).join(', '));
+    const missingPhotos = qualityGates.evaluateSubmissionReadiness(state.resolvedRules, state.evidenceItems, state.brandId).missingRules;
+    if (missingPhotos.length) throw new Error('Required evidence missing: ' + missingPhotos.map(photo => photo.name).join(', '));
     const missingDefectPhotos = state.resolvedRules.filter(rule => allowsMultipleEvidencePhotos(rule.ruleKey) && rule.isMandatory &&
       !state.evidenceItems.some(item => item.ruleKey === rule.ruleKey && getEvidenceFileUri(item)));
     if (missingDefectPhotos.length > 0) {
