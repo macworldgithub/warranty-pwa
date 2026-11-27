@@ -10,7 +10,6 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  PanResponder,
   Image,
   Share,
   Linking,
@@ -299,50 +298,26 @@ export const IssueLoanerWizardScreen: React.FC<
   }
   const totalExcess = basicExcess + ageSurcharge;
 
-  // Touch drawing responder for SVG signature canvas
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: evt => {
-          const { locationX, locationY } = evt.nativeEvent;
-          const startPt = `M${Math.round(locationX)},${Math.round(locationY)}`;
-          currentPathRef.current = startPt;
-          setCurrentPath(startPt);
-        },
-        onPanResponderMove: evt => {
-          const { locationX, locationY } = evt.nativeEvent;
-          const nextPt = `${currentPathRef.current} L${Math.round(
-            locationX,
-          )},${Math.round(locationY)}`;
-          currentPathRef.current = nextPt;
-          setCurrentPath(nextPt);
-        },
-        onPanResponderRelease: () => {
-          if (currentPathRef.current) {
-            let finalStroke = currentPathRef.current;
-            if (!finalStroke.includes(' L')) {
-              const match = finalStroke.match(/M([0-9.]+),([0-9.]+)/);
-              if (match) {
-                const px = parseFloat(match[1]);
-                const py = parseFloat(match[2]);
-                finalStroke = `M${px},${py} L${px + 1},${py + 1}`;
-              }
-            }
-            customerPathsRef.current = [
-              ...customerPathsRef.current,
-              finalStroke,
-            ];
-            setCustomerPaths([...customerPathsRef.current]);
-            currentPathRef.current = '';
-            setCurrentPath('');
-            setIsCustomerSigned(true);
-          }
-        },
-      }),
-    [],
-  );
+  const signaturePointer = useRef<number | null>(null);
+
+  const signaturePoint = (event: React.PointerEvent<HTMLDivElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = Math.round(Math.max(0, Math.min(bounds.width, event.clientX - bounds.left)));
+    const y = Math.round(Math.max(0, Math.min(bounds.height, event.clientY - bounds.top)));
+    return `${x},${y}`;
+  };
+
+  const finishSignatureStroke = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (signaturePointer.current !== event.pointerId) return;
+    signaturePointer.current = null;
+    const stroke = currentPathRef.current;
+    currentPathRef.current = '';
+    setCurrentPath('');
+    if (!stroke.includes(' L')) return;
+    customerPathsRef.current = [...customerPathsRef.current, stroke];
+    setCustomerPaths(customerPathsRef.current);
+    setIsCustomerSigned(true);
+  };
 
   const handleSelectPrepop = (veh: (typeof PREPOPULATED_VEHICLES)[0]) => {
     setRegistration(veh.rego);
@@ -1824,10 +1799,7 @@ export const IssueLoanerWizardScreen: React.FC<
                 )}
               </View>
 
-              <View
-                style={styles.canvasContainer}
-                {...panResponder.panHandlers}
-              >
+              <View style={styles.canvasContainer}>
                 <Svg style={StyleSheet.absoluteFill}>
                   {customerPaths.map((d, index) => (
                     <Path
@@ -1859,14 +1831,27 @@ export const IssueLoanerWizardScreen: React.FC<
                     </Text>
                   </View>
                 )}
+                <div
+                  aria-label="Customer signature pad"
+                  style={{ position: 'absolute', inset: 0, touchAction: 'none', cursor: 'crosshair' }}
+                  onPointerDown={event => {
+                    if (event.button !== 0 || signaturePointer.current !== null) return;
+                    event.preventDefault();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    signaturePointer.current = event.pointerId;
+                    currentPathRef.current = 'M' + signaturePoint(event);
+                    setCurrentPath(currentPathRef.current);
+                  }}
+                  onPointerMove={event => {
+                    if (signaturePointer.current !== event.pointerId) return;
+                    currentPathRef.current += ' L' + signaturePoint(event);
+                    setCurrentPath(currentPathRef.current);
+                  }}
+                  onPointerUp={finishSignatureStroke}
+                  onPointerCancel={finishSignatureStroke}
+                  onLostPointerCapture={finishSignatureStroke}
+                />
               </View>
-
-              <TouchableOpacity style={styles.certifyAlternative} onPress={() => {
-                const sampleSig = 'M25,65 C45,25 65,85 95,45 L165,55 L225,35';
-                customerPathsRef.current = [sampleSig]; setCustomerPaths([sampleSig]); setIsCustomerSigned(true);
-              }} activeOpacity={0.8}>
-                <Text style={styles.certifyAlternativeText}>✍️ Tap to Auto-Certify Signature ({fullName || 'Customer'})</Text>
-              </TouchableOpacity>
               {/* Staff Member Name */}
               <View style={[styles.inputGroup, { marginTop: spacing.sm }]}>
                 <Text style={styles.inputLabel}>
@@ -2625,20 +2610,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94A3B8',
     marginTop: 4,
-  },
-  certifyAlternative: {
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    paddingVertical: 8,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  certifyAlternativeText: {
-    fontSize: 12,
-    color: '#0F172A',
-    fontWeight: '700',
   },
   primarySaveButton: {
     backgroundColor: '#D71920',
