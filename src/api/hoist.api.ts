@@ -58,7 +58,7 @@ function computeSummary(facility?: string): HoistSummary {
 function numberedHoists(hoists: Hoist[]): Hoist[] {
   return hoists.filter(hoist => hoist.isActive !== false && hoist.hoistNumber >= 1 && (hoist.facility === 'southland' || hoist.hoistNumber <= 11))
     .map(hoist => hoist.facility === 'southland' ? hoist : { ...hoist, name: `Hoist ${hoist.hoistNumber}` })
-    .sort((a, b) => a.facility.localeCompare(b.facility) || a.facilityName.localeCompare(b.facilityName) || a.hoistNumber - b.hoistNumber);
+    .sort((a, b) => a.facility.localeCompare(b.facility) || a.hoistNumber - b.hoistNumber || a.facilityName.localeCompare(b.facilityName));
 }
 
 export const hoistApi = {
