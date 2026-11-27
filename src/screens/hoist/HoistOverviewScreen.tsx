@@ -85,7 +85,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
   onOpenVehicles,
 }) => {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, activeSiteId } = useAuth();
   const userFirstName = user?.name ? user.name.trim().split(/\s+/)[0] : 'Shaun';
   const userInitials = getUserInitials(user?.name);
 
@@ -94,7 +94,9 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
 
   // Determine user's assigned facility default
   const defaultFacility: HoistFacility =
-    String(user?.workshopFacility) === 'southland'
+    (activeSiteId || user?.defaultSiteId) === 'site_dandenong_gwm' || user?.workshopFacility === 'dandenong_gwm'
+      ? 'dandenong_gwm'
+      : String(user?.workshopFacility) === 'southland'
       ? 'southland'
       : user?.workshopFacility === 'hyundai_chery'
       ? 'hyundai_chery'
@@ -117,6 +119,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
   }, []);
 
   const locationLabel = (hoist: Hoist) => {
+    if (hoist.facility === 'dandenong_gwm') return hoist.facilityName;
     if (hoist.facility === 'southland') return hoist.facilityName + ' · Southland Cluster';
     const siteId = hoist.siteId;
     const siteName = siteId && (siteNames[siteId] || siteId.replace(/^site_/, '')
@@ -410,6 +413,14 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
         >
           <Text style={[styles.facilityTabText, selectedFacility === 'southland' && styles.facilityTabTextActive]}>
             Southland{selectedFacility === 'southland' ? ` (${totalBays})` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.facilityTab, selectedFacility === 'dandenong_gwm' && styles.facilityTabActive]}
+          onPress={() => setSelectedFacility('dandenong_gwm')}
+        >
+          <Text style={[styles.facilityTabText, selectedFacility === 'dandenong_gwm' && styles.facilityTabTextActive]}>
+            Dandenong GWM{selectedFacility === 'dandenong_gwm' ? ` (${totalBays})` : ''}
           </Text>
         </TouchableOpacity>
       </View>
@@ -723,7 +734,7 @@ export const HoistOverviewScreen: React.FC<HoistOverviewScreenProps> = ({
               </View>
             </View>
 
-            {selectedFacility !== 'southland' && <>
+            {selectedFacility !== 'southland' && selectedFacility !== 'dandenong_gwm' && <>
             {/* Facility Compliance Breakdown */}
             <Text style={styles.complianceSectionTitle}>Workshop Facility Breakdown</Text>
 

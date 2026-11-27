@@ -33,96 +33,23 @@ export interface GeofencePingResponse {
   };
 }
 
-import { ENV } from '../config/env';
-
-
-
-async function fetchFromCandidates<T = any>(
-  endpoint: string,
-  options: RequestInit = {},
-  timeoutMs = 3000
-): Promise<T> {
-  const cleanPath = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-
-  const requests = [ENV.API_URL].map(async (base) => {
-    const url = `${base.replace(/\/+$/, '')}${cleanPath}`;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const res = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          ...(options.headers || {}),
-        },
-      });
-      clearTimeout(timer);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status} from ${url}`);
-      }
-      return (await res.json()) as T;
-    } catch (err) {
-      clearTimeout(timer);
-      throw err;
-    }
-  });
-
-  return await Promise.any(requests);
-}
-
 class MobileGeofenceService {
   public async ping(dto: PingTelemetryDto): Promise<GeofencePingResponse> {
-    try {
-      return await fetchFromCandidates<GeofencePingResponse>(
-        '/geofence/ping',
-        {
-          method: 'POST',
-          body: JSON.stringify(dto),
-        },
-        3000
-      );
-    } catch (_err) {
-      // Fallback to apiClient default request
-      return apiClient.request<GeofencePingResponse>('/geofence/ping', {
-        method: 'POST',
-        body: JSON.stringify(dto),
-      });
-    }
+    return apiClient.request<GeofencePingResponse>('/geofence/ping', {
+      method: 'POST',
+      body: JSON.stringify(dto),
+    });
   }
 
   public async getSiteRoster(siteId: string) {
-    try {
-      return await fetchFromCandidates<any>(
-        `/geofence/roster/${siteId}`,
-        { method: 'GET' },
-        3000
-      );
-    } catch (_err) {
-      return apiClient.request(`/geofence/roster/${siteId}`, {
-        method: 'GET',
-      });
-    }
+    return apiClient.request(`/geofence/roster/${siteId}`, { method: 'GET' });
   }
 
   public async updateSiteRadius(siteId: string, radiusMeters: number) {
-    try {
-      return await fetchFromCandidates<any>(
-        `/sites/${siteId}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ geofenceRadiusMeters: radiusMeters }),
-        },
-        3000
-      );
-    } catch (_err) {
-      return apiClient.request(`/sites/${siteId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ geofenceRadiusMeters: radiusMeters }),
-      });
-    }
+    return apiClient.request(`/sites/${siteId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ geofenceRadiusMeters: radiusMeters }),
+    });
   }
 }
 

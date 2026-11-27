@@ -255,7 +255,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const { user, activeSiteId, logout } = useAuth();
-  const { presenceStatus, siteName, toggleSimulatedPresence } = useGeofence();
+  const { presenceStatus, toggleSimulatedPresence } = useGeofence();
   const { isLiveDrive, demoRunning, tripRecords } = useRoadTest();
   const wizard = useCaseWizard();
   const isDriveActive = isLiveDrive || demoRunning;
@@ -276,6 +276,7 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
   const [agreements, setAgreements] = useState<LoanAgreement[]>([]);
   const [hoistSummary, setHoistSummary] = useState<any>(null);
   const [sites, setSites] = useState<Site[] | null>();
+  const activeRooftopName = sites?.find((site) => site.id === activeSiteId && site.isActive !== false)?.name;
 
   const loadRooftops = useCallback(async () => {
     try {
@@ -709,8 +710,8 @@ export const TechnicianHomeScreen: React.FC<TechnicianHomeScreenProps> = ({
             <View style={styles.fullWidthTextCol}>
               <Text style={styles.fullWidthTitle}>Profile & settings</Text>
               <Text style={styles.fullWidthSubtitle}>
-                {user?.name ? user.name.trim().toLowerCase() : 'shaun'}{'\n'}
-                {siteName || 'Booran BYD Cranbourne'}
+                {user?.name ? user.name.trim().toLowerCase() : 'shaun'}
+                {activeRooftopName ? '\n' + activeRooftopName : ''}
               </Text>
             </View>
           </View>
